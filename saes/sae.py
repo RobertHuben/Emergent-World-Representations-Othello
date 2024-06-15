@@ -1,28 +1,11 @@
-import os
-import pickle
 from abc import ABC, abstractmethod
 import torch 
-
-from EWOthello.data.othello import get
-from EWOthello.mingpt.dataset import CharDataset
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
 from tqdm import tqdm
+import logging
 
+logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
-
-
-def load_pre_trained_gpt(probe_path, probe_layer):
-    """
-    loads the model at probe_path and wires it to run through probe_layer
-    """
-    n_layer = int(probe_path[-5:-4])
-    n_head = int(probe_path[-3:-2])
-    mconf = GPTConfig(61, 59, n_layer=n_layer, n_head=n_head, n_embd=512)
-    GPT_probe = GPTforProbing(mconf, probe_layer)
-    
-    GPT_probe.load_state_dict(torch.load(probe_path + f"GPT_Synthetic_{n_layer}Layers_{n_head}Heads.ckpt", map_location=device))
-    GPT_probe.eval()
-    return GPT_probe
 
 class SAETemplate(torch.nn.Module, ABC):
     '''
@@ -33,10 +16,17 @@ class SAETemplate(torch.nn.Module, ABC):
         super().__init__()
         self.gpt=gpt
         for param in self.gpt.parameters():
-            #freezes the gpt model
+            #freezes the gpt model  
             param.requires_grad=False 
         self.window_start_trim=window_start_trim
         self.window_end_trim=window_end_trim
+        try:
+            self.residual_stream_mean=torch.load("saes/model_params/residual_stream_mean.pkl", map_location=device)
+            self.average_residual_stream_norm=torch.load("saes/model_params/average_residual_stream_norm.pkl", map_location=device)
+        except:
+            self.residual_stream_mean=torch.zeros((1))
+            self.average_residual_stream_norm=torch.ones((1))
+            logger.warning("Please ensure the correct files are in saes/model_params/residual_stream_mean.pkl and saes/model_params/average_residual_stream_norm.pkl!")
 
     def trim_to_window(self, input, offset=0):
         '''
@@ -48,11 +38,17 @@ class SAETemplate(torch.nn.Module, ABC):
         '''
         runs the SAE on a token sequence
 
-        in particular, takes the intermediate layer of the gpt model on this token sequence, trims it to the right part of the context window, and runs the SAE on that residual stream
+        in particular:
+            1. takes the intermediate layer of the gpt model on this token sequence
+            2. trims it to the right part of the context window
+            3. Normalizes it by subtracting the model mean and dividing by the scale factor
+            4. Runs the SAE on that residual stream
         '''
-        residual_stream=self.gpt(token_sequences)
-        trimmed_residual_stream=self.trim_to_window(residual_stream)
-        return self.forward(trimmed_residual_stream)
+        raw_residual_stream=self.gpt(token_sequences)
+        trimmed_residual_stream=self.trim_to_window(raw_residual_stream)
+        normalized_residual_stream=(trimmed_residual_stream-self.residual_stream_mean)/self.average_residual_stream_norm
+        residual_stream, hidden_layer, reconstructed_residual_stream=self.forward(normalized_residual_stream)
+        return residual_stream, hidden_layer, reconstructed_residual_stream
 
     def forward_on_tokens_with_loss(self, token_sequences):
         '''
@@ -123,18 +119,16 @@ class SAETemplate(torch.nn.Module, ABC):
         pass
 
 
-
-class SAE(SAETemplate):
+class SAEAnthropic(SAETemplate):
 
     def __init__(self, gpt:GPTforProbing, feature_ratio:int, sparsity_coefficient:float, window_start_trim:int, window_end_trim:int):
         super().__init__(gpt=gpt, window_start_trim=window_start_trim, window_end_trim=window_end_trim)
         self.feature_ratio=feature_ratio
         self.sparsity_coefficient=sparsity_coefficient
         residual_stream_size=gpt.pos_emb.shape[-1]
-        self.hidden_layer_size = residual_stream_size*feature_ratio
-        self.encoder=torch.nn.Parameter(torch.rand((residual_stream_size, self.hidden_layer_size)))
-        self.encoder_bias=torch.nn.Parameter(torch.rand((self.hidden_layer_size)))
-        self.decoder=torch.nn.Parameter(torch.rand((self.hidden_layer_size, residual_stream_size)))
+        self.encoder=torch.nn.Parameter(torch.rand((residual_stream_size, residual_stream_size*feature_ratio)))
+        self.encoder_bias=torch.nn.Parameter(torch.rand((residual_stream_size*feature_ratio)))
+        self.decoder=torch.nn.Parameter(torch.rand((residual_stream_size*feature_ratio, residual_stream_size)))
         self.decoder_bias=torch.nn.Parameter(torch.rand((residual_stream_size)))
 
 
@@ -143,20 +137,67 @@ class SAE(SAETemplate):
         reconstructed_residual_stream=hidden_layer @ self.decoder + self.decoder_bias
         return residual_stream, hidden_layer, reconstructed_residual_stream
     
-    def activation_function(self, encoder_output):
-        return torch.nn.functional.relu(encoder_output)
-
     def loss_function(self, residual_stream, hidden_layer, reconstructed_residual_stream):
         reconstruction_l2=torch.norm(reconstructed_residual_stream-residual_stream, dim=-1)
         reconstruction_loss=(reconstruction_l2**2).mean()
         sparsity_loss= self.sparsity_loss_function(hidden_layer)*self.sparsity_coefficient
         total_loss=reconstruction_loss+sparsity_loss
         return total_loss
-    
+
+    def activation_function(self, encoder_output):
+        return torch.nn.functional.relu(encoder_output)
+
     def sparsity_loss_function(self, hidden_layer):
         return torch.mean(hidden_layer)
-    
-class Smoothed_L0_SAE(SAE):
+
+
+class SAEDummy(SAETemplate):
+    '''
+    "SAE" whose hidden layer and reconstruction is just the unchanged residual stream
+    '''
+
+    def __init__(self, gpt:GPTforProbing, window_start_trim:int, window_end_trim:int):
+        super().__init__(gpt=gpt, window_start_trim=window_start_trim, window_end_trim=window_end_trim)
+
+    def forward(self, residual_stream):
+        return residual_stream,residual_stream,residual_stream
+
+    def loss_function(self, residual_stream, hidden_layer, reconstructed_residual_stream):
+        return torch.zeros((1))
+
+
+
+def train_model(model:SAETemplate, train_dataset, eval_dataset, batch_size=64, num_epochs=2, report_every_n_steps=500, fixed_seed=1337):
+    '''
+    model be a nn.Module object, and have a print_evaluation() method
+    train_dataset and eval_dataset must be in the list of valid types defined in the recognized_dataset() method in utils/dataloaders 
+    '''
+    if fixed_seed:
+        torch.manual_seed(fixed_seed)
+    model.to(device)
+    model.train()
+    optimizer=torch.optim.AdamW(model.parameters(), lr=1e-3)
+    step=0
+    print(f"Beginning model training on {device}!")
+
+
+    for epoch in range(num_epochs):
+        train_dataloader=iter(torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True))
+        print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_steps} steps.")
+        
+        for input_batch, label_batch in tqdm(train_dataloader):
+            input_batch=input_batch.to(device)
+            step+=1
+            optimizer.zero_grad(set_to_none=True)
+            loss, residual_stream, hidden_layer, reconstructed_residual_stream= model.forward_on_tokens_with_loss(input_batch)
+            loss.backward()
+            optimizer.step()
+            if step % report_every_n_steps==0:
+                model.print_evaluation(loss, eval_dataset, step_number=step)
+    else:
+        model.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
+
+class Smoothed_L0_SAE(SAETemplate):
     def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, epsilon: float, delta: float, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, feature_ratio, sparsity_coefficient, window_start_trim, window_end_trim)
         self.epsilon = epsilon
@@ -167,7 +208,7 @@ class Smoothed_L0_SAE(SAE):
         transitions = [{"x":self.epsilon, "epsilon":self.epsilon, "delta":self.delta, "focus":"left"}]
         return torch.mean(smoothed_piecewise(hidden_layer, functions, transitions), dim=-1)
     
-class Without_TopK_SAE(SAE):
+class Without_TopK_SAE(SAETemplate):
     def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, k: int, p: int, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, feature_ratio, sparsity_coefficient, window_start_trim, window_end_trim)
         self.k = k
@@ -180,7 +221,7 @@ class Without_TopK_SAE(SAE):
         return torch.mean(torch.norm(without_top_k, p=self.p, dim=-1))
 
     
-class No_Sparsity_Loss_SAE(SAE):
+class No_Sparsity_Loss_SAE(SAETemplate):
     def __init__(self, gpt: GPTforProbing, feature_ratio: int, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, feature_ratio, 0.0, window_start_trim, window_end_trim)
 
@@ -317,54 +358,3 @@ def smoothed_piecewise(input, functions, transitions):
             n = torch.log(torch.max(left_and_right, dim=0).values/t["epsilon"] - 1)/t["delta"]
         sum += sig(n*(input-t["x"])) * h(input) - sig(n*(input-t["x"])) * g(input)
     return sum
-
-def train_model(model:SAETemplate, train_dataset, eval_dataset, batch_size=64, num_epochs=2, report_every_n_steps=500, fixed_seed=1337):
-    '''
-    model be a nn.Module object, and have a print_evaluation() method
-    train_dataset and eval_dataset must be in the list of valid types defined in the recognized_dataset() method in utils/dataloaders 
-    '''
-    if fixed_seed:
-        torch.manual_seed(fixed_seed)
-    model.to(device)
-    model.train()
-    optimizer=torch.optim.AdamW(model.parameters(), lr=1e-3)
-    step=0
-    print(f"Beginning model training on {device}!")
-
-
-    for epoch in range(num_epochs):
-        train_dataloader=iter(torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True))
-        print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_steps} steps.")
-        
-        for input_batch, label_batch in tqdm(train_dataloader):
-            input_batch=input_batch.to(device)
-            step+=1
-            optimizer.zero_grad(set_to_none=True)
-            loss, residual_stream, hidden_layer, reconstructed_residual_stream= model.forward_on_tokens_with_loss(input_batch)
-            loss.backward()
-            optimizer.step()
-            if step % report_every_n_steps==0:
-                model.print_evaluation(loss, eval_dataset, step_number=step)
-    else:
-        model.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega", details=True)
-
-if __name__=="__main__":
-    print("Beginning training process. It may take a moment to load the datasets...")
-    probe_path = "EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/"
-    probe_layer = 6
-    GPT_probe=load_pre_trained_gpt(probe_path=probe_path, probe_layer=probe_layer)
-
-    train_dataset = CharDataset(get(ood_num=-1, data_root=None, num_preload=11)) # 11 corresponds to over 1 million games
-
-    test_dataset = CharDataset(get(ood_num=-1, data_root=None, num_preload=1))
-    test_set_indices=torch.arange(1000)
-    test_1k_dataset = torch.utils.data.Subset(test_dataset, test_set_indices)
-
-    print("\n\n\n")
-    print(len(test_dataset))
-    print("\n\n\n")
-
-    sae=SAE(gpt=GPT_probe, feature_ratio=2, sparsity_coefficient=.1, window_start_trim=4, window_end_trim=4)
-    print("SAE initialized, proceeding to train!")
-
-    train_model(sae, train_dataset, test_1k_dataset, report_every_n_steps=10)
