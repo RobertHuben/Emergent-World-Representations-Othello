@@ -239,12 +239,13 @@ class No_Sparsity_Loss_SAE(SAETemplate):
         return 0.0
     
 class Leaky_Topk_SAE(No_Sparsity_Loss_SAE):
-    def __init__(self, gpt: GPTforProbing, feature_ratio: int, epsilon: float, window_start_trim: int, window_end_trim: int):
+    def __init__(self, gpt: GPTforProbing, feature_ratio: int, epsilon: float, k:int, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, feature_ratio, window_start_trim, window_end_trim)
         self.epsilon = epsilon
+        self.k=k
 
     def activation_function(self, encoder_output):
-        kth_value = torch.topk(torch.abs(encoder_output), k=k).values.min(dim=-1).values
+        kth_value = torch.topk(torch.abs(encoder_output), k=self.k).values.min(dim=-1).values
         return suppress_lower_activations(encoder_output, kth_value, epsilon=self.epsilon)
 
 class Dimension_Reduction_SAE(No_Sparsity_Loss_SAE):
