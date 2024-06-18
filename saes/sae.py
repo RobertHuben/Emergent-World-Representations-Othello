@@ -127,15 +127,18 @@ class SAETemplate(torch.nn.Module, ABC):
 
 class SAEAnthropic(SAETemplate):
 
-    def __init__(self, gpt:GPTforProbing, feature_ratio:int, sparsity_coefficient:float, window_start_trim:int, window_end_trim:int):
+    def __init__(self, gpt:GPTforProbing, feature_ratio:int, sparsity_coefficient:float, window_start_trim:int, window_end_trim:int, decoder_initialization_scale=0.1):
         super().__init__(gpt=gpt, window_start_trim=window_start_trim, window_end_trim=window_end_trim)
         self.feature_ratio=feature_ratio
         self.sparsity_coefficient=sparsity_coefficient
         residual_stream_size=gpt.pos_emb.shape[-1]
-        self.encoder=torch.nn.Parameter(torch.rand((residual_stream_size, residual_stream_size*feature_ratio)))
-        self.encoder_bias=torch.nn.Parameter(torch.rand((residual_stream_size*feature_ratio)))
-        self.decoder=torch.nn.Parameter(torch.rand((residual_stream_size*feature_ratio, residual_stream_size)))
-        self.decoder_bias=torch.nn.Parameter(torch.rand((residual_stream_size)))
+        decoder_initial_value=torch.randn((residual_stream_size*feature_ratio, residual_stream_size))
+        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
+        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
+        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
+        self.encoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size*feature_ratio)))
+        self.decoder=torch.nn.Parameter(decoder_initial_value)
+        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
 
 
     def forward(self, residual_stream):
@@ -236,12 +239,13 @@ class No_Sparsity_Loss_SAE(SAETemplate):
         return 0.0
     
 class Leaky_Topk_SAE(No_Sparsity_Loss_SAE):
-    def __init__(self, gpt: GPTforProbing, feature_ratio: int, epsilon: float, window_start_trim: int, window_end_trim: int):
+    def __init__(self, gpt: GPTforProbing, feature_ratio: int, epsilon: float, k:int, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, feature_ratio, window_start_trim, window_end_trim)
         self.epsilon = epsilon
+        self.k=k
 
     def activation_function(self, encoder_output):
-        kth_value = torch.topk(torch.abs(encoder_output), k=k).values.min(dim=-1).values
+        kth_value = torch.topk(torch.abs(encoder_output), k=self.k).values.min(dim=-1).values
         return suppress_lower_activations(encoder_output, kth_value, epsilon=self.epsilon)
 
 class Dimension_Reduction_SAE(No_Sparsity_Loss_SAE):
