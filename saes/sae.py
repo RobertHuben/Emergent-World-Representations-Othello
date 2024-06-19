@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 import torch 
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
+from EWOthello.mingpt.dataset import CharDataset
 from tqdm import tqdm
 import logging
+
 
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
@@ -58,7 +60,7 @@ class SAETemplate(torch.nn.Module, ABC):
         loss = self.loss_function(residual_stream, hidden_layer, reconstructed_residual_stream)
         return loss, residual_stream, hidden_layer, reconstructed_residual_stream
 
-    def catenate_outputs_on_dataset(self, dataset, batch_size=8, include_loss=False):
+    def catenate_outputs_on_dataset(self, dataset:CharDataset, batch_size=8, include_loss=False):
         '''
         runs the model on the entire dataset, one batch at a time, catenating the outputs
         '''
@@ -86,7 +88,7 @@ class SAETemplate(torch.nn.Module, ABC):
         else:
             return residual_streams, hidden_layers, reconstructed_residual_streams
 
-    def print_evaluation(self, train_loss, eval_dataset, step_number="N/A"):
+    def print_evaluation(self, train_loss, eval_dataset:CharDataset, step_number="N/A"):
         losses, residual_streams, hidden_layers, reconstructed_residual_streams=self.catenate_outputs_on_dataset(eval_dataset, include_loss=True)
         test_loss=losses.mean()
         l0_sparsity=self.compute_l0_sparsity(hidden_layers)
@@ -104,6 +106,55 @@ class SAETemplate(torch.nn.Module, ABC):
         dead_features=torch.all(torch.flatten(active_features, end_dim=-2), dim=0)
         num_dead_features=dead_features.sum()
         return num_dead_features
+
+    def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=2, report_every_n_steps=500, fixed_seed=1337):
+        '''
+        performs a training loop on self, with printed evaluations
+        '''
+        if fixed_seed:
+            torch.manual_seed(fixed_seed)
+        self.to(device)
+        self.train()
+        optimizer=torch.optim.AdamW(self.parameters(), lr=1e-3)
+        step=0
+        print(f"Beginning model training on {device}!")
+
+        for epoch in range(num_epochs):
+            train_dataloader=iter(torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True))
+            print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_steps} steps.")
+            
+            for input_batch, label_batch in tqdm(train_dataloader):
+                input_batch=input_batch.to(device)
+                step+=1
+                optimizer.zero_grad(set_to_none=True)
+                loss, residual_stream, hidden_layer, reconstructed_residual_stream= self.forward_on_tokens_with_loss(input_batch)
+                loss.backward()
+                optimizer.step()
+                if step % report_every_n_steps==0:
+                    self.print_evaluation(loss, eval_dataset, step_number=step)
+        else:
+            self.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
+
+    def model_specs_to_string(self, eval_dataset=None):
+        '''
+        returns a string representation of the model
+        '''
+        information=[f"Model type: {type(self)}", f"Number of parameters: {sum([param.numel() for param in self.parameters()])}"]
+        information.extend(self.report_model_specific_features())
+        if eval_dataset:
+            losses, residual_streams, hidden_layers, reconstructed_residual_streams=self.catenate_outputs_on_dataset(eval_dataset, include_loss=True)
+            test_loss=losses.mean()
+            l0_sparsity=self.compute_l0_sparsity(hidden_layers)
+            dead_features=self.count_dead_features(hidden_layers)
+            information.extend([f"Results of evaluation on {len(eval_dataset)} games ({residual_streams.shape[0]*residual_streams.shape[1]} activations):", f"    Loss: {test_loss:.2f}", f"    L0 Sparsity: {l0_sparsity:.1f}", f"    Dead features: {dead_features:.0f}"])
+        return "\n".join(information)
+
+    @abstractmethod
+    def report_model_specific_features(self):
+        '''
+        returns a list of strings, describing features specific to the type of SAE, such as hyperparameters
+        '''
+        return ["No model-specific features"]
 
     @abstractmethod
     def forward(self, residual_stream):
@@ -132,11 +183,12 @@ class SAEAnthropic(SAETemplate):
         self.feature_ratio=feature_ratio
         self.sparsity_coefficient=sparsity_coefficient
         residual_stream_size=gpt.pos_emb.shape[-1]
-        decoder_initial_value=torch.randn((residual_stream_size*feature_ratio, residual_stream_size))
+        self.hidden_layer_size=residual_stream_size*feature_ratio
+        decoder_initial_value=torch.randn((self.hidden_layer_size, residual_stream_size))
         decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
         decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
         self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
-        self.encoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size*feature_ratio)))
+        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.hidden_layer_size)))
         self.decoder=torch.nn.Parameter(decoder_initial_value)
         self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
 
@@ -159,6 +211,9 @@ class SAEAnthropic(SAETemplate):
     def sparsity_loss_function(self, hidden_layer):
         decoder_row_norms=self.decoder.norm(dim=1)
         return torch.mean(hidden_layer*decoder_row_norms)
+    
+    def report_model_specific_features(self):
+        return [f"Hidden layer size: {self.hidden_layer_size}",f"Sparsity loss coefficient: {self.sparsity_coefficient}"]
 
 
 class SAEDummy(SAETemplate):
@@ -175,37 +230,6 @@ class SAEDummy(SAETemplate):
     def loss_function(self, residual_stream, hidden_layer, reconstructed_residual_stream):
         return torch.zeros((1))
 
-
-
-def train_model(model:SAETemplate, train_dataset, eval_dataset, batch_size=64, num_epochs=2, report_every_n_steps=500, fixed_seed=1337):
-    '''
-    model be a nn.Module object, and have a print_evaluation() method
-    train_dataset and eval_dataset must be in the list of valid types defined in the recognized_dataset() method in utils/dataloaders 
-    '''
-    if fixed_seed:
-        torch.manual_seed(fixed_seed)
-    model.to(device)
-    model.train()
-    optimizer=torch.optim.AdamW(model.parameters(), lr=1e-3)
-    step=0
-    print(f"Beginning model training on {device}!")
-
-
-    for epoch in range(num_epochs):
-        train_dataloader=iter(torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True))
-        print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_steps} steps.")
-        
-        for input_batch, label_batch in tqdm(train_dataloader):
-            input_batch=input_batch.to(device)
-            step+=1
-            optimizer.zero_grad(set_to_none=True)
-            loss, residual_stream, hidden_layer, reconstructed_residual_stream= model.forward_on_tokens_with_loss(input_batch)
-            loss.backward()
-            optimizer.step()
-            if step % report_every_n_steps==0:
-                model.print_evaluation(loss, eval_dataset, step_number=step)
-    else:
-        model.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
 
 class Smoothed_L0_SAE(SAETemplate):
     def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, epsilon: float, delta: float, window_start_trim: int, window_end_trim: int):
