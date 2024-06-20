@@ -9,6 +9,7 @@ def compute_all_aurocs(sae: SAETemplate, evaluation_dataset:DataLoader, alternat
     '''
     computes aurocs of each sae feature on the entire evaluation_dataset
     returns a shape (N,64,3) tensor, where N is the number of features
+    alters the sae state by writing the value of sae.number_of_high_quality_classifiers
     '''
     _, hidden_layers, __=sae.catenate_outputs_on_dataset(evaluation_dataset, include_loss=False)
     board_states= get_board_states(evaluation_dataset,alternate_players=alternate_players)
@@ -27,4 +28,5 @@ def compute_all_aurocs(sae: SAETemplate, evaluation_dataset:DataLoader, alternat
                 metric = BinaryAUROC()
                 metric.update(feature_activation[ended_game_mask], is_target_piece[ended_game_mask].int())
                 aurocs[i,j,k]=float(metric.compute())
+    sae.number_of_high_quality_classifiers=(aurocs.max(dim=0).values>.9).sum()
     return aurocs

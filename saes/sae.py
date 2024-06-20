@@ -22,6 +22,7 @@ class SAETemplate(torch.nn.Module, ABC):
             param.requires_grad=False 
         self.window_start_trim=window_start_trim
         self.window_end_trim=window_end_trim
+        self.number_of_high_quality_classifiers=None
         try:
             self.residual_stream_mean=torch.load("saes/model_params/residual_stream_mean.pkl", map_location=device)
             self.average_residual_stream_norm=torch.load("saes/model_params/average_residual_stream_norm.pkl", map_location=device)
@@ -107,6 +108,11 @@ class SAETemplate(torch.nn.Module, ABC):
         num_dead_features=dead_features.sum()
         return num_dead_features
 
+    def reconstruction_error(self, residual_stream, reconstructed_residual_stream):
+        reconstruction_l2=torch.norm(reconstructed_residual_stream-residual_stream, dim=-1)
+        reconstruction_loss=(reconstruction_l2**2).mean()
+        return reconstruction_loss
+
     def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=2, report_every_n_steps=500, fixed_seed=1337):
         '''
         performs a training loop on self, with printed evaluations
@@ -141,12 +147,19 @@ class SAETemplate(torch.nn.Module, ABC):
         '''
         information=[f"Model type: {type(self)}", f"Number of parameters: {sum([param.numel() for param in self.parameters()])}"]
         information.extend(self.report_model_specific_features())
+        information.append(f"Number of AUROC>.9 classifiers (None=not evaluated): {self.number_of_high_quality_classifiers}")
         if eval_dataset:
             losses, residual_streams, hidden_layers, reconstructed_residual_streams=self.catenate_outputs_on_dataset(eval_dataset, include_loss=True)
             test_loss=losses.mean()
             l0_sparsity=self.compute_l0_sparsity(hidden_layers)
             dead_features=self.count_dead_features(hidden_layers)
-            information.extend([f"Results of evaluation on {len(eval_dataset)} games ({residual_streams.shape[0]*residual_streams.shape[1]} activations):", f"    Loss: {test_loss:.2f}", f"    L0 Sparsity: {l0_sparsity:.1f}", f"    Dead features: {dead_features:.0f}"])
+            reconstruction_error=self.reconstruction_error(residual_streams, reconstructed_residual_streams)
+            information.extend([
+                f"Results of evaluation on {len(eval_dataset)} games ({residual_streams.shape[0]*residual_streams.shape[1]} activations):", 
+                f"    Loss: {test_loss:.2f}", 
+                f"    Reconstruction Loss: {reconstruction_error:.2f}",
+                f"    L0 Sparsity: {l0_sparsity:.1f}", 
+                f"    Dead features: {dead_features:.0f}", ])
         return "\n".join(information)
 
     @abstractmethod
@@ -199,8 +212,7 @@ class SAEAnthropic(SAETemplate):
         return residual_stream, hidden_layer, reconstructed_residual_stream
     
     def loss_function(self, residual_stream, hidden_layer, reconstructed_residual_stream):
-        reconstruction_l2=torch.norm(reconstructed_residual_stream-residual_stream, dim=-1)
-        reconstruction_loss=(reconstruction_l2**2).mean()
+        reconstruction_loss=self.reconstruction_error(residual_stream, reconstructed_residual_stream)
         sparsity_loss= self.sparsity_loss_function(hidden_layer)*self.sparsity_coefficient
         total_loss=reconstruction_loss+sparsity_loss
         return total_loss
