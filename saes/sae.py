@@ -1,10 +1,13 @@
-from abc import ABC, abstractmethod
 import torch 
+import logging
+from abc import ABC, abstractmethod
+from tqdm import tqdm
+from torch.utils.data import DataLoader
+from torcheval.metrics import BinaryAUROC
+
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
 from EWOthello.mingpt.dataset import CharDataset
-from tqdm import tqdm
-import logging
-
+from board_states import get_board_states
 
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
@@ -22,7 +25,7 @@ class SAETemplate(torch.nn.Module, ABC):
             param.requires_grad=False 
         self.window_start_trim=window_start_trim
         self.window_end_trim=window_end_trim
-        self.number_of_high_quality_classifiers=None
+        self.classifier_aurocs=None
         try:
             self.residual_stream_mean=torch.load("saes/model_params/residual_stream_mean.pkl", map_location=device)
             self.average_residual_stream_norm=torch.load("saes/model_params/average_residual_stream_norm.pkl", map_location=device)
@@ -188,6 +191,37 @@ class SAETemplate(torch.nn.Module, ABC):
         '''
         pass
 
+
+    def compute_all_aurocs(self, evaluation_dataset:DataLoader, alternate_players=True):
+        '''
+        computes aurocs of each sae feature on the entire evaluation_dataset
+        returns a shape (N,64,3) tensor, where N is the number of features
+        alters the self state by writing the value of self.number_of_high_quality_classifiers
+        '''
+        _, hidden_layers, __=self.catenate_outputs_on_dataset(evaluation_dataset, include_loss=False)
+        board_states= get_board_states(evaluation_dataset,alternate_players=alternate_players)
+        board_states=self.trim_to_window(board_states)
+        hidden_layers=hidden_layers.flatten(end_dim=-2)
+        board_states=board_states.flatten(end_dim=-2)
+        game_not_ended_mask=board_states[:,0]>-100
+        hidden_layers=hidden_layers[game_not_ended_mask]
+        board_states=board_states[game_not_ended_mask]
+        aurocs=torch.zeros((hidden_layers.shape[1], board_states.shape[1], 3))
+        for i, feature_activation in tqdm(enumerate(hidden_layers.transpose(0,1))):
+            for j, board_position in enumerate(board_states.transpose(0,1)):
+                for k, piece_class in enumerate([0,1,2]):
+                    is_target_piece=board_position==piece_class
+                    ended_game_mask= board_position>-100
+                    metric = BinaryAUROC()
+                    metric.update(feature_activation[ended_game_mask], is_target_piece[ended_game_mask].int())
+                    aurocs[i,j,k]=float(metric.compute())
+        self.classifier_aurocs=aurocs
+
+    def num_high_accuracy_classifiers(self, threshold=.9):
+        if self.classifier_aurocs is None:
+            logger.warning("This SAE does not have its aurocs computed! Run compute_all_aurocs() first!")
+        best_aurocs=self.classifier_aurocs.max(dim=0).values
+        return (best_aurocs>.9).sum()
 
 class SAEAnthropic(SAETemplate):
 
