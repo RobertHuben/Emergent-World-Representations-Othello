@@ -150,7 +150,8 @@ class SAETemplate(torch.nn.Module, ABC):
         '''
         information=[f"Model type: {type(self)}", f"Number of parameters: {sum([param.numel() for param in self.parameters()])}"]
         information.extend(self.report_model_specific_features())
-        information.append(f"Number of AUROC>.9 classifiers (None=not evaluated): {self.number_of_high_quality_classifiers}")
+        information.append(f"Number of AUROC>.9 classifiers (None=not evaluated): {self.num_high_accuracy_classifiers()}")
+        information.append(f"Average classifer AUROC (None=not evaluated): {self.average_classifier_accuracy()}")
         if eval_dataset:
             losses, residual_streams, hidden_layers, reconstructed_residual_streams=self.catenate_outputs_on_dataset(eval_dataset, include_loss=True)
             test_loss=losses.mean()
@@ -218,10 +219,24 @@ class SAETemplate(torch.nn.Module, ABC):
         self.classifier_aurocs=aurocs
 
     def num_high_accuracy_classifiers(self, threshold=.9):
+        '''
+        if self.classifier aurocs is computed, returns the number of board state features which are well-classified
+        if self.classifier aurocs is not computed, returns None
+        '''
         if self.classifier_aurocs is None:
-            logger.warning("This SAE does not have its aurocs computed! Run compute_all_aurocs() first!")
+            return None
         best_aurocs=self.classifier_aurocs.max(dim=0).values
-        return (best_aurocs>.9).sum()
+        return int((best_aurocs>threshold).sum())
+
+    def average_classifier_accuracy(self):
+        '''
+        if self.classifier aurocs is computed, returns the classifer accuracy averaged over all positions/pieces
+        if self.classifier aurocs is not computed, returns None
+        '''
+        if self.classifier_aurocs is None:
+            return None
+        best_aurocs=self.classifier_aurocs.max(dim=0).values
+        return float(torch.mean(best_aurocs))
 
 class SAEAnthropic(SAETemplate):
 
