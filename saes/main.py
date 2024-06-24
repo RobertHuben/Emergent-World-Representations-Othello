@@ -3,7 +3,6 @@ from tqdm import tqdm
 
 from sae import SAEAnthropic
 from utils import load_pre_trained_gpt, load_dataset
-from evaluation import compute_all_aurocs
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
