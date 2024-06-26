@@ -166,7 +166,6 @@ class SAETemplate(torch.nn.Module, ABC):
                 f"    Dead features: {dead_features:.0f}", ])
         return "\n".join(information)
 
-    @abstractmethod
     def report_model_specific_features(self):
         '''
         returns a list of strings, describing features specific to the type of SAE, such as hyperparameters
@@ -282,7 +281,7 @@ class SAEDummy(SAETemplate):
     "SAE" whose hidden layer and reconstruction is just the unchanged residual stream
     '''
 
-    def __init__(self, gpt:GPTforProbing, window_start_trim:int, window_end_trim:int):
+    def __init__(self, gpt:GPTforProbing, window_start_trim:int=4, window_end_trim:int=8):
         super().__init__(gpt=gpt, window_start_trim=window_start_trim, window_end_trim=window_end_trim)
 
     def forward(self, residual_stream):
