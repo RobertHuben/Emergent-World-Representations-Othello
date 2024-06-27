@@ -26,6 +26,7 @@ class SAETemplate(torch.nn.Module, ABC):
             param.requires_grad=False 
         self.window_start_trim=window_start_trim
         self.window_end_trim=window_end_trim
+        self.num_data_trained_on=0
         self.classifier_aurocs=None
         self.classifer_smds=None
         try:
@@ -137,6 +138,7 @@ class SAETemplate(torch.nn.Module, ABC):
             for input_batch, label_batch in tqdm(train_dataloader):
                 input_batch=input_batch.to(device)
                 step+=1
+                self.num_data_trained_on+=len(input_batch)
                 optimizer.zero_grad(set_to_none=True)
                 loss, residual_stream, hidden_layer, reconstructed_residual_stream= self.forward_on_tokens_with_loss(input_batch)
                 loss.backward()
@@ -150,10 +152,16 @@ class SAETemplate(torch.nn.Module, ABC):
         '''
         returns a string representation of the model
         '''
-        information=[f"Model type: {type(self)}", f"Number of parameters: {sum([param.numel() for param in self.parameters()])}"]
+        information=[f"Model type: {type(self)}", 
+                     f"Number of parameters: {sum([param.numel() for param in self.parameters()])}", 
+                     f"Number of games trained on: {self.num_data_trained_on}"]
         information.extend(self.report_model_specific_features())
-        information.append(f"Number of AUROC>.9 classifiers (None=not evaluated): {self.num_high_accuracy_classifiers()}")
-        information.append(f"Average classifer AUROC (None=not evaluated): {self.average_classifier_accuracy()}")
+        information.extend([
+                            f"Number of SMD>2 classifiers (None=not evaluated): {self.num_classifier_above_threshold(metric_name="classifier_smds", threshold=2)}",
+                            f"Average classifer SMD (None=not evaluated): {self.average_classifier_score(metric_name="classifier_smds")}",
+                            f"Number of AUROC>.9 classifiers (None=not evaluated): {self.num_classifier_above_threshold()}",
+                            f"Average classifer AUROC (None=not evaluated): {self.average_classifier_score()}",
+                            ])
         if eval_dataset:
             losses, residual_streams, hidden_layers, reconstructed_residual_streams=self.catenate_outputs_on_dataset(eval_dataset, include_loss=True)
             test_loss=losses.mean()
@@ -247,26 +255,33 @@ class SAETemplate(torch.nn.Module, ABC):
                     standardized_mean_distances[i,j,k]=torch.abs(first_mean-second_mean)/feature_stdev
         self.classifer_smds=standardized_mean_distances
 
-    def num_high_accuracy_classifiers(self, threshold=.9):
+    def num_classifier_above_threshold(self, metric_name="classifier_aurocs", threshold=.9):
         '''
-        if self.classifier aurocs is computed, returns the number of board state features which are well-classified
-        if self.classifier aurocs is not computed, returns None
+        returns the number of board state features which are well-classified (the named metric is above threshold)
+        if self.metric_name is None, will return None instead
+        supported choices for metric_name: "classifier_aurocs", "classifier_smds"
         '''
-        if self.classifier_aurocs is None:
+        metric=getattr(self, metric_name)
+        if metric is None:
             return None
-        best_aurocs=self.classifier_aurocs.max(dim=0).values
-        return int((best_aurocs>threshold).sum())
+        best_scores=metric.max(dim=0).values
+        return int((best_scores>threshold).sum())
 
-    def average_classifier_accuracy(self):
+    def average_classifier_score(self, metric_name="classifier_aurocs"):
         '''
+        returns the classifer accuracy (of the named metric) averaged over all positions/pieces
+        if self.metric_name is None, will return None instead
+        supported choices for metric_name: "classifier_aurocs", "classifier_smds"
+
         if self.classifier aurocs is computed, returns the classifer accuracy averaged over all positions/pieces
         if self.classifier aurocs is not computed, returns None
         '''
-        if self.classifier_aurocs is None:
+        metric=getattr(self, metric_name)
+        if metric is None:
             return None
-        best_aurocs=self.classifier_aurocs.max(dim=0).values
-        return float(torch.mean(best_aurocs))
-
+        best_scores=metric.max(dim=0).values
+        return float(torch.mean(best_scores))
+    
 class SAEAnthropic(SAETemplate):
 
     def __init__(self, gpt:GPTforProbing, feature_ratio:int, sparsity_coefficient:float, window_start_trim:int, window_end_trim:int, decoder_initialization_scale=0.1):
