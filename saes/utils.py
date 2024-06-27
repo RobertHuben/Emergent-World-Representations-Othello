@@ -12,6 +12,7 @@ def load_datasets_automatic(train_size:int,test_size:int, shuffle_seed=1) -> Cha
     '''
     creates a test and train dataset of the given sizes.
     train_size and test_size must both be positive
+    maximum dataset size: ~23M
     '''
     num_datasets_to_load=(test_size+train_size)//100000 + 1
     othello = get(ood_num=-1, data_root=None, num_preload=num_datasets_to_load) # 11 corresponds to over 1 million games
