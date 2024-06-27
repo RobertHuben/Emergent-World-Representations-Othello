@@ -119,7 +119,7 @@ class SAETemplate(torch.nn.Module, ABC):
         reconstruction_loss=(reconstruction_l2**2).mean()
         return reconstruction_loss
 
-    def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=2, report_every_n_steps=500, fixed_seed=1337):
+    def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=1, report_every_n_steps=500, fixed_seed=1337):
         '''
         performs a training loop on self, with printed evaluations
         '''
