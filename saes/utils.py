@@ -19,7 +19,7 @@ def load_dataset(split_fraction=1, use_first_half_of_split=True, entries_limit=F
     dataset=CharDataset(othello)
     return dataset
 
-def load_pre_trained_gpt(probe_path, probe_layer):
+def load_pre_trained_gpt(probe_path="EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/", probe_layer:int=3):
     """
     loads the model at probe_path and wires it to run through probe_layer
     """
