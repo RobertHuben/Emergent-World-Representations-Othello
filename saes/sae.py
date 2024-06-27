@@ -7,6 +7,7 @@ from torcheval.metrics import BinaryAUROC
 from scipy.stats import ttest_ind, ttest_ind_from_stats
 
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
+from EWOthello.mingpt.probe_model import BatteryProbeClassification
 from EWOthello.mingpt.dataset import CharDataset
 from board_states import get_board_states
 
@@ -282,6 +283,21 @@ class SAETemplate(torch.nn.Module, ABC):
         best_scores=metric.max(dim=0).values
         return float(torch.mean(best_scores))
     
+class SAEPretrainedProbes(SAETemplate):
+    def __init__(self, gpt: GPTforProbing, probe_layer: int, window_start_trim: int, window_end_trim: int):
+        super().__init__(gpt, window_start_trim, window_end_trim)
+        
+        residual_stream_size=gpt.pos_emb.shape[-1]
+        probe = BatteryProbeClassification(device, probe_class=3, num_task=64, input_dim=residual_stream_size)
+        probe.load_state_dict(torch.load(f"../EWOthello/chkpts/DeanKLi_GPT_Synthetic_8L8H/linearProbe_Map_New_8L8H_GPT_Layer{probe_layer}.ckpt"))
+        self.probe = probe
+
+    def forward(self, residual_stream):
+        targets = None
+        logits = self.probe.proj(residual_stream, targets)
+        return (residual_stream, logits, residual_stream)
+
+
 class SAEAnthropic(SAETemplate):
 
     def __init__(self, gpt:GPTforProbing, feature_ratio:int, sparsity_coefficient:float, window_start_trim:int, window_end_trim:int, decoder_initialization_scale=0.1):
