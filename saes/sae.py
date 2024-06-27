@@ -126,9 +126,9 @@ class SAEAnthropic(SAETemplate):
         self.feature_ratio=feature_ratio
         self.sparsity_coefficient=sparsity_coefficient
         residual_stream_size=gpt.pos_emb.shape[-1]
-        self.encoder=torch.nn.Parameter(torch.rand((residual_stream_size, residual_stream_size*feature_ratio)))
+        self.encoder=torch.nn.Parameter(torch.rand((residual_stream_size, residual_stream_size*feature_ratio))) #transpose of encoder matrix
         self.encoder_bias=torch.nn.Parameter(torch.rand((residual_stream_size*feature_ratio)))
-        self.decoder=torch.nn.Parameter(torch.rand((residual_stream_size*feature_ratio, residual_stream_size)))
+        self.decoder=torch.nn.Parameter(torch.rand((residual_stream_size*feature_ratio, residual_stream_size))) #transpose of decoder matrix
         self.decoder_bias=torch.nn.Parameter(torch.rand((residual_stream_size)))
 
 
