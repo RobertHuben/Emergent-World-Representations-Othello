@@ -4,9 +4,24 @@ from EWOthello.mingpt.model import GPTConfig, GPTforProbing
 from EWOthello.mingpt.dataset import CharDataset
 from sae import SAEDummy
 import random
+from copy import copy
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
+def load_datasets_automatic(train_size:int,test_size:int, shuffle_seed=1) -> CharDataset:
+    '''
+    creates a test and train dataset of the given sizes.
+    train_size and test_size must both be positive
+    '''
+    num_datasets_to_load=(test_size+train_size)//100000 + 1
+    othello = get(ood_num=-1, data_root=None, num_preload=num_datasets_to_load) # 11 corresponds to over 1 million games
+
+    random.seed(shuffle_seed)
+    random.shuffle(othello.sequences)
+    train_othello, test_othello=copy(othello), copy(othello)
+    train_othello.sequences=othello.sequences[:train_size]
+    test_othello.sequences=othello.sequences[train_size:train_size+test_size]
+    return CharDataset(train_othello), CharDataset(test_othello)
 
 def load_dataset(split_fraction=1, use_first_half_of_split=True, entries_limit=False, shuffle_seed=1) -> CharDataset:
     othello = get(ood_num=-1, data_root=None, num_preload=11) # 11 corresponds to over 1 million games
