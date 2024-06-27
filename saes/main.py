@@ -1,31 +1,26 @@
 import torch 
 from tqdm import tqdm
 
-from utils import load_pre_trained_gpt
-from sae import SAEAnthropic, train_model
-from EWOthello.data.othello import get
-from EWOthello.mingpt.dataset import CharDataset
-from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
+from sae import SAEAnthropic
+from utils import load_pre_trained_gpt, load_dataset
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
+def training_dataset_sweep():
+    for entries_limit in [1e3, 1e4,1e5,1e6]:
+        GPT_probe=load_pre_trained_gpt()
+        print("Beginning training process. It may take a moment to load the datasets...")
+        train_dataset = load_dataset(split_fraction=.95, use_first_half_of_split=True, entries_limit=int(entries_limit))
+        test_dataset = load_dataset(split_fraction=.95, use_first_half_of_split=False, entries_limit=1000)
+
+        sae=SAEAnthropic(gpt=GPT_probe, feature_ratio=2, sparsity_coefficient=10, window_start_trim=4, window_end_trim=4)
+
+        print("SAE initialized, proceeding to train!")
+        sae.train_model(train_dataset, test_dataset, report_every_n_steps=500)
+
+        print("Finished SAE training, proceeding to evaluate classifiers!")
+        sae.compute_all_smd(sae, test_dataset)
+        print(sae.model_specs_to_string())
+
 if __name__=="__main__":
-    print("Beginning training process. It may take a moment to load the datasets...")
-    probe_path = "EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/"
-    probe_layer = 3
-    GPT_probe=load_pre_trained_gpt(probe_path=probe_path, probe_layer=probe_layer)
-
-    train_dataset = CharDataset(get(ood_num=-1, data_root=None, num_preload=11)) # 11 corresponds to over 1 million games
-
-    test_dataset = CharDataset(get(ood_num=-1, data_root=None, num_preload=1))
-    test_set_indices=torch.arange(1000)
-    test_1k_dataset = torch.utils.data.Subset(test_dataset, test_set_indices)
-
-    print("\n\n\n")
-    print(len(test_dataset))
-    print("\n\n\n")
-
-    sae=SAEAnthropic(gpt=GPT_probe, feature_ratio=2, sparsity_coefficient=.1, window_start_trim=4, window_end_trim=4)
-    print("SAE initialized, proceeding to train!")
-
-    train_model(sae, train_dataset, test_1k_dataset, report_every_n_steps=500)
+    training_dataset_sweep()

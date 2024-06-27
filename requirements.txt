@@ -3,3 +3,5 @@ numpy
 tqdm
 scipy
 circuitsvis
+seaborn
+torcheval
