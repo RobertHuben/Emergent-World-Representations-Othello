@@ -28,7 +28,7 @@ class SAETemplate(torch.nn.Module, ABC):
         self.window_end_trim=window_end_trim
         self.num_data_trained_on=0
         self.classifier_aurocs=None
-        self.classifer_smds=None
+        self.classifier_smds=None
         try:
             self.residual_stream_mean=torch.load("saes/model_params/residual_stream_mean.pkl", map_location=device)
             self.average_residual_stream_norm=torch.load("saes/model_params/average_residual_stream_norm.pkl", map_location=device)
@@ -157,8 +157,8 @@ class SAETemplate(torch.nn.Module, ABC):
                      f"Number of games trained on: {self.num_data_trained_on}"]
         information.extend(self.report_model_specific_features())
         information.extend([
-                            f"Number of SMD>2 classifiers (None=not evaluated): {self.num_classifier_above_threshold(metric_name="classifier_smds", threshold=2)}",
-                            f"Average classifer SMD (None=not evaluated): {self.average_classifier_score(metric_name="classifier_smds")}",
+                            f"Number of SMD>2 classifiers (None=not evaluated): {self.num_classifier_above_threshold(metric_name='classifier_smds', threshold=2)}",
+                            f"Average classifer SMD (None=not evaluated): {self.average_classifier_score(metric_name='classifier_smds')}",
                             f"Number of AUROC>.9 classifiers (None=not evaluated): {self.num_classifier_above_threshold()}",
                             f"Average classifer AUROC (None=not evaluated): {self.average_classifier_score()}",
                             ])
@@ -253,7 +253,7 @@ class SAETemplate(torch.nn.Module, ABC):
                     first_mean=feature_activation[is_target_piece].mean()
                     second_mean=feature_activation[~ is_target_piece].mean()
                     standardized_mean_distances[i,j,k]=torch.abs(first_mean-second_mean)/feature_stdev
-        self.classifer_smds=standardized_mean_distances
+        self.classifier_smds=standardized_mean_distances
 
     def num_classifier_above_threshold(self, metric_name="classifier_aurocs", threshold=.9):
         '''
