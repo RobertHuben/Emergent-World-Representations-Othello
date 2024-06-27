@@ -238,6 +238,9 @@ class SAETemplate(torch.nn.Module, ABC):
             feature_stdev=feature_activation.std()
             for j, board_position in enumerate(board_states.transpose(0,1)):
                 for k, piece_class in enumerate([0,1,2]):
+                    if j in [27,28,35,36] and k==1:
+                        #center pieces are never empty
+                        continue
                     is_target_piece=board_position==piece_class
                     first_mean=feature_activation[is_target_piece].mean()
                     second_mean=feature_activation[~ is_target_piece].mean()
@@ -310,6 +313,7 @@ class SAEDummy(SAETemplate):
 
     def __init__(self, gpt:GPTforProbing, window_start_trim:int=4, window_end_trim:int=8):
         super().__init__(gpt=gpt, window_start_trim=window_start_trim, window_end_trim=window_end_trim)
+        self.to(device)
 
     def forward(self, residual_stream):
         return residual_stream,residual_stream,residual_stream
