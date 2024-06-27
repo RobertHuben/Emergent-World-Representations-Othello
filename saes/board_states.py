@@ -140,10 +140,9 @@ def report_board_state(board:OthelloBoardState, alternate_players=True):
         if alternate_players: 0=enemy piece, 1=blank, 2=active player's piece
         else: 3=white, 4=blank, 5=black
     '''
-    board_as_tensor= torch.tensor(board.state, dtype=int) # starts -1 to 1 
+    board_as_tensor= torch.tensor(board.state, dtype=int) # starts -1 to 1, 1=black, -1=white
     if alternate_players:
-        if board.next_hand_color:
-            board_as_tensor*=-1 # still -1 to 1
+        board_as_tensor*=board.next_hand_color # still -1 to 1
         board_as_tensor+=1 # 0 to 2
     else:
         board_as_tensor+=4 # 3 to 5
