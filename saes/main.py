@@ -1,11 +1,11 @@
 import sys
 import os
-sys.path.append(os.path.join( os.path.dirname ( __file__), os.path.pardir))#"C:/Users/andre/Code/othello_gpt_saes/Emergent-World-Representations-Othello")
+sys.path.append(os.path.join( os.path.dirname ( __file__), os.path.pardir))
 
 import torch 
 from tqdm import tqdm
 
-from sae import SAEAnthropic
+from sae import SAEAnthropic, SAEPretrainedProbes
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
@@ -24,8 +24,8 @@ def training_dataset_sweep():
 def evaluate_pretrained_probes():
     gpt = load_pre_trained_gpt()
     sae = SAEPretrainedProbes(gpt, probe_layer=3, window_start_trim=4, window_end_trim=4)
-    test_dataset = load_dataset(split_fraction=.95, use_first_half_of_split=False, entries_limit=1000)
-    #sae.compute_all_aurocs(test_dataset)
+    _, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
+    sae.compute_all_aurocs(test_dataset)
     sae.compute_all_smd(test_dataset)
     print(sae.model_specs_to_string())
 
