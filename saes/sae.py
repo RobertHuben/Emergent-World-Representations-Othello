@@ -291,7 +291,7 @@ class SAEPretrainedProbes(SAETemplate):
         probe = BatteryProbeClassification(device, probe_class=3, num_task=64, input_dim=residual_stream_size)
         probe_path = f"EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/linearProbe_Map_New_8L8H_GPT_Layer{probe_layer}.ckpt"
         probe.load_state_dict(torch.load(probe_path, map_location=device))
-        self.probe = probe
+        self.probe = probe.to(device)
 
     def forward(self, residual_stream):
         logits = self.probe.proj(residual_stream)
