@@ -286,6 +286,7 @@ class SAETemplate(torch.nn.Module, ABC):
 class SAEPretrainedProbes(SAETemplate):
     def __init__(self, gpt: GPTforProbing, probe_layer: int, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, window_start_trim, window_end_trim)
+        self.gpt.to(device)
 
         residual_stream_size=gpt.pos_emb.shape[-1]
         probe = BatteryProbeClassification(device, probe_class=3, num_task=64, input_dim=residual_stream_size)
