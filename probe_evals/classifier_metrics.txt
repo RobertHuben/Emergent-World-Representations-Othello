@@ -1,0 +1,48 @@
+Layer 1 classification metrics:
+Average smd: 1.563
+Number of classifiers with smd > 2.0: 23
+Average auroc: 0.903
+Number of classifiers with auroc > 0.9: 127
+
+Layer 2 classification metrics:
+Average smd: 1.718
+Number of classifiers with smd > 2.0: 50
+Average auroc: 0.929
+Number of classifiers with auroc > 0.9: 150
+
+Layer 3 classification metrics:
+Average smd: 1.815
+Number of classifiers with smd > 2.0: 71
+Average auroc: 0.944
+Number of classifiers with auroc > 0.9: 166
+
+Layer 4 classification metrics:
+Average smd: 1.864
+Number of classifiers with smd > 2.0: 76
+Average auroc: 0.951
+Number of classifiers with auroc > 0.9: 175
+
+Layer 5 classification metrics:
+Average smd: 1.888
+Number of classifiers with smd > 2.0: 77
+Average auroc: 0.955
+Number of classifiers with auroc > 0.9: 180
+
+Layer 6 classification metrics:
+Average smd: 1.85
+Number of classifiers with smd > 2.0: 63
+Average auroc: 0.958
+Number of classifiers with auroc > 0.9: 186
+
+Layer 7 classification metrics:
+Average smd: 1.686
+Number of classifiers with smd > 2.0: 23
+Average auroc: 0.956
+Number of classifiers with auroc > 0.9: 188
+
+Layer 8 classification metrics:
+Average smd: 1.718
+Number of classifiers with smd > 2.0: 39
+Average auroc: 0.956
+Number of classifiers with auroc > 0.9: 180
+
