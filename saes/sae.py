@@ -1,4 +1,5 @@
 import torch 
+from torch.nn import functional as F
 import logging
 from abc import ABC, abstractmethod
 from tqdm import tqdm
@@ -316,7 +317,7 @@ class SAEAnthropic(SAETemplate):
         return total_loss
 
     def activation_function(self, encoder_output):
-        return torch.nn.functional.relu(encoder_output)
+        return F.relu(encoder_output)
 
     def sparsity_loss_function(self, hidden_layer):
         decoder_row_norms=self.decoder.norm(dim=1)
@@ -340,8 +341,32 @@ class SAEDummy(SAETemplate):
 class Gated_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, window_start_trim: int, window_end_trim: int, decoder_initialization_scale=0.1):
         super().__init__(gpt, feature_ratio, sparsity_coefficient, window_start_trim, window_end_trim, decoder_initialization_scale)
-        self.r_gate = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
-        self.b_gate = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
+        self.b_gate = self.encoder_bias #just renaming to make this more clear
+        self.r_mag = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
+        self.b_mag = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
+
+    def forward(self, residual_stream, compute_loss=False):
+        encoding = residual_stream @ self.encoder
+        hidden_layer_before_gating = encoding * torch.exp(self.r_mag) + self.b_mag
+        hidden_layer = ((encoding + self.b_gate) > 0) * hidden_layer_before_gating
+        normalized_decoder = F.normalize(self.decoder, p=2, dim=1)
+        reconstructed_residual_stream = hidden_layer @ normalized_decoder + self.decoder_bias
+
+        if compute_loss:
+            reconstruction_loss=self.reconstruction_error(residual_stream, reconstructed_residual_stream)
+
+            hidden_layer_without_gating = F.relu(encoding+self.b_gate)
+            sparsity_loss = self.sparsity_loss_function(hidden_layer_without_gating)*self.sparsity_coefficient
+
+            reconstruction_without_gating = hidden_layer_without_gating @ normalized_decoder.detach() + self.decoder_bias.detach() #seriously, this doesn't use r_mag or b_mag????
+            auxiliary_loss = self.reconstruction_error(residual_stream, reconstruction_without_gating)
+            loss = reconstruction_loss + sparsity_loss + auxiliary_loss
+        else:
+            loss = None
+        return loss, residual_stream, hidden_layer, reconstructed_residual_stream
+    
+    def sparsity_loss_function(self, gated_activations):
+        return torch.mean(gated_activations)
 
 
 class Smoothed_L0_SAE(SAEAnthropic):
