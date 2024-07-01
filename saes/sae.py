@@ -32,6 +32,7 @@ class SAETemplate(torch.nn.Module, ABC):
         self.num_data_trained_on=0
         self.classifier_aurocs=None
         self.classifier_smds=None
+        self.classifier_ssmds=None
         try:
             self.residual_stream_mean=torch.load("saes/model_params/residual_stream_mean.pkl", map_location=device)
             self.average_residual_stream_norm=torch.load("saes/model_params/average_residual_stream_norm.pkl", map_location=device)
@@ -122,7 +123,7 @@ class SAETemplate(torch.nn.Module, ABC):
         reconstruction_loss=(reconstruction_l2**2).mean()
         return reconstruction_loss
 
-    def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=1, report_every_n_steps=500, fixed_seed=1337):
+    def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=1, report_every_n_steps=500, learning_rate=1e-3, fixed_seed=1337):
         '''
         performs a training loop on self, with printed evaluations
         '''
@@ -130,8 +131,9 @@ class SAETemplate(torch.nn.Module, ABC):
             torch.manual_seed(fixed_seed)
         self.to(device)
         self.train()
-        optimizer=torch.optim.AdamW(self.parameters(), lr=1e-3)
+        optimizer=torch.optim.AdamW(self.parameters(), lr=learning_rate)
         step=0
+        report_on_batch_number=report_every_n_steps//batch_size
         print(f"Beginning model training on {device}!")
 
         for epoch in range(num_epochs):
@@ -146,10 +148,11 @@ class SAETemplate(torch.nn.Module, ABC):
                 loss, residual_stream, hidden_layer, reconstructed_residual_stream= self.forward_on_tokens_with_loss(input_batch)
                 loss.backward()
                 optimizer.step()
-                if step % report_every_n_steps==0:
+                if step % report_on_batch_number==0:
                     self.print_evaluation(loss, eval_dataset, step_number=step)
         else:
             self.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
+        self.eval()
 
     def model_specs_to_string(self, eval_dataset=None):
         '''
@@ -173,8 +176,8 @@ class SAETemplate(torch.nn.Module, ABC):
             reconstruction_error=self.reconstruction_error(residual_streams, reconstructed_residual_streams)
             information.extend([
                 f"Results of evaluation on {len(eval_dataset)} games ({residual_streams.shape[0]*residual_streams.shape[1]} activations):", 
-                f"    Loss: {test_loss:.2f}", 
-                f"    Reconstruction Loss: {reconstruction_error:.2f}",
+                f"    Loss: {test_loss:.3f}", 
+                f"    Reconstruction Loss: {reconstruction_error:.3f}",
                 f"    L0 Sparsity: {l0_sparsity:.1f}", 
                 f"    Dead features: {dead_features:.0f}", ])
         return "\n".join(information)
@@ -227,10 +230,12 @@ class SAETemplate(torch.nn.Module, ABC):
                     ended_game_mask= board_position>-100
                     metric = BinaryAUROC()
                     metric.update(feature_activation[ended_game_mask], is_target_piece[ended_game_mask].int())
-                    aurocs[i,j,k]=float(metric.compute())
+                    this_auroc=float(metric.compute())
+                    this_auroc_rectified=max(this_auroc, 1-this_auroc)
+                    aurocs[i,j,k]=this_auroc_rectified
         self.classifier_aurocs=aurocs
 
-    def compute_all_smd(self, evaluation_dataset:DataLoader, alternate_players=True):
+    def compute_all_smd(self, evaluation_dataset:DataLoader, alternate_players=True, use_whole_dist_stdev=False):
         '''
         computes aurocs of each sae feature on the entire evaluation_dataset
         returns a shape (N,64,3) tensor, where N is the number of features
@@ -246,7 +251,8 @@ class SAETemplate(torch.nn.Module, ABC):
         board_states=board_states[game_not_ended_mask]
         standardized_mean_distances=torch.zeros((hidden_layers.shape[1], board_states.shape[1], 3))
         for i, feature_activation in tqdm(enumerate(hidden_layers.transpose(0,1))):
-            feature_stdev=feature_activation.std()
+            if use_whole_dist_stdev:
+                feature_stdev=feature_activation.std()
             for j, board_position in enumerate(board_states.transpose(0,1)):
                 for k, piece_class in enumerate([0,1,2]):
                     if j in [27,28,35,36] and k==1:
@@ -255,8 +261,18 @@ class SAETemplate(torch.nn.Module, ABC):
                     is_target_piece=board_position==piece_class
                     first_mean=feature_activation[is_target_piece].mean()
                     second_mean=feature_activation[~ is_target_piece].mean()
-                    standardized_mean_distances[i,j,k]=torch.abs(first_mean-second_mean)/feature_stdev
-        self.classifier_smds=standardized_mean_distances
+                    if use_whole_dist_stdev:
+                        smd=torch.abs(first_mean-second_mean)/feature_stdev
+                    else:
+                        first_var=feature_activation[is_target_piece].var()
+                        second_var=feature_activation[~ is_target_piece].var()
+                        combined_stdev=torch.sqrt(first_var + second_var)
+                        smd=torch.abs(first_mean-second_mean)/combined_stdev
+                    standardized_mean_distances[i,j,k]=smd
+        if use_whole_dist_stdev:
+            self.classifier_smds=standardized_mean_distances
+        else:
+            self.classifier_ssmds=standardized_mean_distances
 
     def num_classifier_above_threshold(self, metric_name="classifier_aurocs", threshold=.9):
         '''
