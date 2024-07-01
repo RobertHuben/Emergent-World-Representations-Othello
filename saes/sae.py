@@ -340,7 +340,6 @@ class SAEAnthropic(SAETemplate):
     def report_model_specific_features(self):
         return [f"Hidden layer size: {self.hidden_layer_size}",f"Sparsity loss coefficient: {self.sparsity_coefficient}"]
 
-
 class SAEDummy(SAETemplate):
     '''
     "SAE" whose hidden layer and reconstruction is just the unchanged residual stream
@@ -356,32 +355,39 @@ class SAEDummy(SAETemplate):
     def loss_function(self, residual_stream, hidden_layer, reconstructed_residual_stream):
         return torch.zeros((1))
 
+class SAEGated(SAETemplate):
+    def __init__(self, gpt: GPTforProbing, window_start_trim: int, window_end_trim: int):
+        super().__init__(gpt, window_start_trim, window_end_trim)
 
-class Smoothed_L0_SAE(SAETemplate):
+class Smoothed_L0_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, epsilon: float, delta: float, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, feature_ratio, sparsity_coefficient, window_start_trim, window_end_trim)
         self.epsilon = epsilon
         self.delta = delta
 
     def sparsity_loss_function(self, hidden_layer):
+        decoder_row_norms=self.decoder.norm(dim=1)
+        normalized_hidden_layer = hidden_layer*decoder_row_norms #does doing this just like in SAEAnthropic make sense?
         functions = [CallableConstant(0.0), CallableConstant(1.0)]
         transitions = [{"x":self.epsilon, "epsilon":self.epsilon, "delta":self.delta, "focus":"left"}]
-        return torch.mean(smoothed_piecewise(hidden_layer, functions, transitions), dim=-1)
+        return torch.mean(smoothed_piecewise(normalized_hidden_layer, functions, transitions), dim=-1)
     
-class Without_TopK_SAE(SAETemplate):
+class Without_TopK_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, k: int, p: int, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, feature_ratio, sparsity_coefficient, window_start_trim, window_end_trim)
         self.k = k
         self.p = p
 
     def sparsity_loss_function(self, hidden_layer):
-        top_k_indices = torch.topk(torch.abs(hidden_layer), self.k, dim=-1).indices
+        decoder_row_norms=self.decoder.norm(dim=1)
+        normalized_hidden_layer = hidden_layer*decoder_row_norms #does doing this just like in SAEAnthropic make sense?
+        top_k_indices = torch.topk(torch.abs(hidden_layer), self.k, dim=-1).indices #should we find topk from hidden_layer or normalized_hidden_layer?
         top_k_mask = torch.ones(hidden_layer.shape).to(device).scatter_(-1, top_k_indices, 0)
-        without_top_k = hidden_layer * top_k_mask
+        without_top_k = normalized_hidden_layer * top_k_mask
         return torch.mean(torch.norm(without_top_k, p=self.p, dim=-1))
 
     
-class No_Sparsity_Loss_SAE(SAETemplate):
+class No_Sparsity_Loss_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, feature_ratio: int, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, feature_ratio, 0.0, window_start_trim, window_end_trim)
 
