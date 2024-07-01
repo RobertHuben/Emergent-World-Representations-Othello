@@ -11,8 +11,6 @@ from EWOthello.mingpt.probe_model import BatteryProbeClassification
 from EWOthello.mingpt.dataset import CharDataset
 from board_states import get_board_states
 
-import os
-
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -304,12 +302,13 @@ class SAETemplate(torch.nn.Module, ABC):
 class SAEPretrainedProbes(SAETemplate):
     def __init__(self, gpt: GPTforProbing, probe_layer: int, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, window_start_trim, window_end_trim)
+        self.gpt.to(device)
 
         residual_stream_size=gpt.pos_emb.shape[-1]
         probe = BatteryProbeClassification(device, probe_class=3, num_task=64, input_dim=residual_stream_size)
-        probe_path = os.path.join( os.path.dirname ( __file__), os.path.pardir, f"EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/linearProbe_Map_New_8L8H_GPT_Layer{probe_layer}.ckpt")
+        probe_path = f"EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/linearProbe_Map_New_8L8H_GPT_Layer{probe_layer}.ckpt"
         probe.load_state_dict(torch.load(probe_path, map_location=device))
-        self.probe = probe
+        self.probe = probe.to(device)
 
     def forward(self, residual_stream):
         logits = self.probe.proj(residual_stream)

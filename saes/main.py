@@ -1,12 +1,13 @@
 import sys
 import os
-sys.path.append(os.path.join( os.path.dirname ( __file__), os.path.pardir))#"C:/Users/andre/Code/othello_gpt_saes/Emergent-World-Representations-Othello")
+sys.path.append(os.path.join( os.path.dirname ( __file__), os.path.pardir))
 
 import torch 
 from tqdm import tqdm
 
-from sae import SAEAnthropic
+from sae import SAEAnthropic, SAEPretrainedProbes
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
+from analysis_plotter import plot_smd_auroc_distributions
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -21,16 +22,15 @@ def training_dataset_sweep():
         saes[-1].compute_all_smd(smd_evaluation_dataset)
         print(saes[-1].model_specs_to_string())
 
-def evaluate_pretrained_probes():
-    gpt = load_pre_trained_gpt()
-    sae = SAEPretrainedProbes(gpt, probe_layer=3, window_start_trim=4, window_end_trim=4)
-    test_dataset = load_dataset(split_fraction=.95, use_first_half_of_split=False, entries_limit=1000)
-    #sae.compute_all_aurocs(test_dataset)
-    sae.compute_all_smd(test_dataset)
-    print(sae.model_specs_to_string())
-
+def evaluate_pretrained_probes(save_dir=None):
+    gpts_for_probing = {layer:load_pre_trained_gpt(probe_layer=layer) for layer in range(1, 8+1)}
+    probes = {layer: SAEPretrainedProbes(gpts_for_probing[layer], probe_layer=layer, window_start_trim=4, window_end_trim=4) for layer in range(1, 8+1)}
+    for layer in range(1, 8+1):
+        layer_dir = f"{save_dir}/layer_{layer}"
+        plot_smd_auroc_distributions(probes[layer], save_dir=layer_dir)
+        
 
 if __name__=="__main__":
 
     #training_dataset_sweep()
-    evaluate_pretrained_probes()
+    evaluate_pretrained_probes(save_dir="probe_evals")
