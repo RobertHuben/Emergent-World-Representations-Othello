@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torcheval.metrics import BinaryAUROC
-from scipy.stats import ttest_ind, ttest_ind_from_stats
 
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
 from EWOthello.mingpt.dataset import CharDataset
@@ -29,7 +28,6 @@ class SAETemplate(torch.nn.Module, ABC):
         self.num_data_trained_on=0
         self.classifier_aurocs=None
         self.classifier_smds=None
-        self.classifier_ssmds=None
         try:
             self.residual_stream_mean=torch.load("saes/model_params/residual_stream_mean.pkl", map_location=device)
             self.average_residual_stream_norm=torch.load("saes/model_params/average_residual_stream_norm.pkl", map_location=device)
@@ -204,7 +202,7 @@ class SAETemplate(torch.nn.Module, ABC):
         '''
         pass
 
-
+    @torch.inference_mode()
     def compute_all_aurocs(self, evaluation_dataset:DataLoader, alternate_players=True):
         '''
         computes aurocs of each sae feature on the entire evaluation_dataset
@@ -232,7 +230,8 @@ class SAETemplate(torch.nn.Module, ABC):
                     aurocs[i,j,k]=this_auroc_rectified
         self.classifier_aurocs=aurocs
 
-    def compute_all_smd(self, evaluation_dataset:DataLoader, alternate_players=True, use_whole_dist_stdev=False):
+    @torch.inference_mode()
+    def compute_all_smd(self, evaluation_dataset:DataLoader, alternate_players=True):
         '''
         computes aurocs of each sae feature on the entire evaluation_dataset
         returns a shape (N,64,3) tensor, where N is the number of features
@@ -248,8 +247,7 @@ class SAETemplate(torch.nn.Module, ABC):
         board_states=board_states[game_not_ended_mask]
         standardized_mean_distances=torch.zeros((hidden_layers.shape[1], board_states.shape[1], 3))
         for i, feature_activation in tqdm(enumerate(hidden_layers.transpose(0,1))):
-            if use_whole_dist_stdev:
-                feature_stdev=feature_activation.std()
+            feature_stdev=feature_activation.std()
             for j, board_position in enumerate(board_states.transpose(0,1)):
                 for k, piece_class in enumerate([0,1,2]):
                     if j in [27,28,35,36] and k==1:
@@ -258,18 +256,9 @@ class SAETemplate(torch.nn.Module, ABC):
                     is_target_piece=board_position==piece_class
                     first_mean=feature_activation[is_target_piece].mean()
                     second_mean=feature_activation[~ is_target_piece].mean()
-                    if use_whole_dist_stdev:
-                        smd=torch.abs(first_mean-second_mean)/feature_stdev
-                    else:
-                        first_var=feature_activation[is_target_piece].var()
-                        second_var=feature_activation[~ is_target_piece].var()
-                        combined_stdev=torch.sqrt(first_var + second_var)
-                        smd=torch.abs(first_mean-second_mean)/combined_stdev
+                    smd=torch.abs(first_mean-second_mean)/feature_stdev
                     standardized_mean_distances[i,j,k]=smd
-        if use_whole_dist_stdev:
-            self.classifier_smds=standardized_mean_distances
-        else:
-            self.classifier_ssmds=standardized_mean_distances
+        self.classifier_smds=standardized_mean_distances
 
     def num_classifier_above_threshold(self, metric_name="classifier_aurocs", threshold=.9):
         '''
