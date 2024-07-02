@@ -5,7 +5,7 @@ sys.path.append(os.path.join( os.path.dirname ( __file__), os.path.pardir))
 import torch 
 from tqdm import tqdm
 
-from sae import SAEAnthropic, SAEPretrainedProbes
+from saes.architectures import SAEAnthropic, SAEPretrainedProbes
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
 
