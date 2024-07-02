@@ -1,2 +1,6 @@
 dev_code/*
 .vscode
+connecting_to_server_notes.txt
+probe_evals/*
+*.pyc
+.gitignore

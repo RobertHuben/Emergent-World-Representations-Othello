@@ -338,28 +338,40 @@ class SAEDummy(SAETemplate):
     def forward(self, residual_stream, compute_loss=False):
         return None, residual_stream,residual_stream,residual_stream
 
+#supported variants: mag_in_aux_loss, relu_only
 class Gated_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, window_start_trim: int, window_end_trim: int, decoder_initialization_scale=0.1):
+    def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, window_start_trim: int, window_end_trim: int, no_aux_loss=False, decoder_initialization_scale=0.1):
         super().__init__(gpt, feature_ratio, sparsity_coefficient, window_start_trim, window_end_trim, decoder_initialization_scale)
         self.b_gate = self.encoder_bias #just renaming to make this more clear
         self.r_mag = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
         self.b_mag = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
+        self.no_aux_loss = no_aux_loss
 
     def forward(self, residual_stream, compute_loss=False):
-        encoding = residual_stream @ self.encoder
-        hidden_layer_before_gating = encoding * torch.exp(self.r_mag) + self.b_mag
-        hidden_layer = ((encoding + self.b_gate) > 0) * hidden_layer_before_gating
+        if self.no_aux_loss:
+            encoder = F.normalize(self.encoder, p=2, dim=1)
+        else:
+            encoder = self.encoder
+        encoding = residual_stream @ encoder
+        if self.no_aux_loss:
+            hidden_layer = (F.relu(encoding + self.b_gate) - self.b_gate) * torch.exp(self.r_mag) + self.b_mag
+        else:
+            hidden_layer_before_gating = encoding * torch.exp(self.r_mag) + self.b_mag
+            hidden_layer = ((encoding + self.b_gate) > 0) * hidden_layer_before_gating
         normalized_decoder = F.normalize(self.decoder, p=2, dim=1)
         reconstructed_residual_stream = hidden_layer @ normalized_decoder + self.decoder_bias
 
         if compute_loss:
             reconstruction_loss=self.reconstruction_error(residual_stream, reconstructed_residual_stream)
 
-            hidden_layer_without_gating = F.relu(encoding+self.b_gate)
-            sparsity_loss = self.sparsity_loss_function(hidden_layer_without_gating)*self.sparsity_coefficient
+            hidden_layer_without_gating_or_mag = F.relu(encoding+self.b_gate)
+            sparsity_loss = self.sparsity_loss_function(hidden_layer_without_gating_or_mag)*self.sparsity_coefficient
 
-            reconstruction_without_gating = hidden_layer_without_gating @ normalized_decoder.detach() + self.decoder_bias.detach() #seriously, this doesn't use r_mag or b_mag????
-            auxiliary_loss = self.reconstruction_error(residual_stream, reconstruction_without_gating)
+            if self.no_aux_loss:
+                auxiliary_loss = 0.0
+            else:
+                reconstruction_without_gating = hidden_layer_without_gating_or_mag @ normalized_decoder.detach() + self.decoder_bias.detach() #seriously, this doesn't use r_mag or b_mag????
+                auxiliary_loss = self.reconstruction_error(residual_stream, reconstruction_without_gating)
             loss = reconstruction_loss + sparsity_loss + auxiliary_loss
         else:
             loss = None
