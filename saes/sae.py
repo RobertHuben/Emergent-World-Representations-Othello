@@ -364,8 +364,8 @@ class Gated_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, no_aux_loss=False, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
         self.b_gate = self.encoder_bias #just renaming to make this more clear
-        self.r_mag = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
-        self.b_mag = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
+        self.r_mag = torch.nn.Parameter(torch.randn(num_features,))
+        self.b_mag = torch.nn.Parameter(torch.randn(num_features,))
         self.no_aux_loss = no_aux_loss
 
     def forward(self, residual_stream, compute_loss=False):
@@ -492,10 +492,10 @@ class Leaky_Topk_SAE(SAETemplate):
         kth_value = torch.topk(torch.abs(encoder_output), k=self.k).values.min(dim=-1).values
         return suppress_lower_activations(encoder_output, kth_value, epsilon=self.epsilon)
     
-    def forward(self, residual_stream):
+    def forward(self, residual_stream, compute_loss=False):
         '''
         takes the trimmed residual stream of a language model (as produced by run_gpt_and_trim) and runs the SAE
-        must return a tuple (residual_stream, hidden_layer, reconstructed_residual_stream)
+        must return a tuple (loss, residual_stream, hidden_layer, reconstructed_residual_stream)
         residual_stream is shape (B, W, D), where B is batch size, W is (trimmed) window length, and D is the dimension of the model:
             - residual_stream is unchanged, of size (B, W, D)
             - hidden_layer is of shape (B, W, D') where D' is the size of the hidden layer
@@ -503,7 +503,11 @@ class Leaky_Topk_SAE(SAETemplate):
         '''
         hidden_layer=self.activation_function(residual_stream @ self.encoder + self.encoder_bias)
         reconstructed_residual_stream=hidden_layer @ self.decoder + self.decoder_bias
-        return residual_stream, hidden_layer, reconstructed_residual_stream
+        if compute_loss:
+            loss = self.loss_function(residual_stream, hidden_layer, reconstructed_residual_stream)
+        else:
+            loss = None
+        return loss, residual_stream, hidden_layer, reconstructed_residual_stream
 
     def loss_function(self, residual_stream, hidden_layer, reconstructed_residual_stream):
         return self.reconstruction_error(residual_stream, reconstructed_residual_stream)
