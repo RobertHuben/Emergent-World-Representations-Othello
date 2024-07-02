@@ -300,7 +300,6 @@ class SAEPretrainedProbes(SAETemplate):
         loss = None
         return loss, residual_stream, logits, residual_stream
 
-
 class SAEAnthropic(SAETemplate):
 
     def __init__(self, gpt:GPTforProbing, feature_ratio:int, sparsity_coefficient:float, window_start_trim:int, window_end_trim:int, decoder_initialization_scale=0.1):
@@ -408,7 +407,7 @@ class ActivationQueue:
             self.list.pop()
     
     def sparsity_coefficient_factor(self, last_p, next_p):
-        list_as_tensor = torch.Tensor(self.list).to(device)
+        list_as_tensor = torch.stack(self.list).to(device)
         return torch.sum(list_as_tensor**last_p) / torch.sum(list_as_tensor**next_p)
 
 class P_Annealing_SAE(SAEAnthropic):
@@ -426,7 +425,7 @@ class P_Annealing_SAE(SAEAnthropic):
     
     def after_step_update(self, hidden_layer=None, step = None):
         if self.anneal_start - step <= self.queue.length:
-            self.queue.add(hidden_layer)
+            self.queue.add(hidden_layer.detach())
         if step >= self.anneal_start:
             next_p = self.p - self.p_step
             self.sparsity_coefficient *= self.queue.sparsity_coefficient_factor(self.p, next_p)
@@ -447,7 +446,7 @@ class Smoothed_L0_SAE(SAEAnthropic):
         normalized_hidden_layer = hidden_layer*decoder_row_norms #does doing this just like in SAEAnthropic make sense?
         functions = [CallableConstant(0.0), CallableConstant(1.0)]
         transitions = [{"x":self.epsilon, "epsilon":self.epsilon, "delta":self.delta, "focus":"left"}]
-        return torch.mean(smoothed_piecewise(normalized_hidden_layer, functions, transitions), dim=-1)
+        return torch.mean(smoothed_piecewise(normalized_hidden_layer, functions, transitions))
     
 class Without_TopK_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, k: int, p: int, window_start_trim: int, window_end_trim: int):
