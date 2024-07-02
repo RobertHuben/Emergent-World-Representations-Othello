@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 
 from utils import load_datasets_automatic
 
+device='cuda' if torch.cuda.is_available() else 'cpu'
 
 def plot_smd_auroc_distributions(sae, save_dir=None):
     if save_dir:
@@ -49,4 +50,24 @@ def plot_smd_auroc_distributions(sae, save_dir=None):
             f.write(output_str)
     else:
         print(output_str)
+
+
+def plot_accuracies(sae_location, save_location=None):
+    with open(sae_location, 'rb') as f:
+        sae = torch.load(f, map_location=device)
+    class_names=["Enemy", "Blank", "Own"]
+    fig, axes = plt.subplots(1,3, constrained_layout=True)
+
+    for i in range(3):
+        data=sae.classifier_smds[:,:,i].max(dim=0).values
+        data=data.reshape((8,8))
+        im=axes[i].imshow(data, vmin=0, vmax=2)
+        axes[i].set_title(f"SMD of {class_names[i]}")
+    
+    fig.suptitle("SMD of classification by target class")
+    fig.colorbar(im)
+    if save_location:
+        plt.savefig(save_location)
+    else:
+        plt.show()
 
