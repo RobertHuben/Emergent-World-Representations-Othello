@@ -121,8 +121,10 @@ class SAETemplate(torch.nn.Module, ABC):
         self.train()
         optimizer=torch.optim.AdamW(self.parameters(), lr=1e-3)
         step=0
-        print(f"Beginning model training on {device}!")
 
+        self.training_prep(train_dataset=train_dataset, eval_dataset=eval_dataset, batch_size=batch_size, num_epochs=num_epochs)
+
+        print(f"Beginning model training on {device}!")
         for epoch in range(num_epochs):
             train_dataloader=iter(torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True))
             print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_steps} steps.")
@@ -135,10 +137,25 @@ class SAETemplate(torch.nn.Module, ABC):
                 loss, residual_stream, hidden_layer, reconstructed_residual_stream= self.forward_on_tokens(input_batch, compute_loss=True)
                 loss.backward()
                 optimizer.step()
+
+                self.after_step_update(hidden_layer=hidden_layer, step=step)
+
                 if step % report_every_n_steps==0:
                     self.print_evaluation(loss, eval_dataset, step_number=step)
         else:
             self.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
+
+    def training_prep(self, train_dataset=None, eval_dataset=None, batch_size=None, num_epochs=None):
+        '''
+        for anything additional that needs to be done before training starts
+        '''
+        return
+    
+    def after_step_update(self, hidden_layer=None, step=None):
+        '''
+        for anything additional that needs to be done after each training step
+        '''
+        return
 
     def model_specs_to_string(self, eval_dataset=None):
         '''
@@ -380,6 +397,44 @@ class Gated_SAE(SAEAnthropic):
     def sparsity_loss_function(self, gated_activations):
         return torch.mean(gated_activations)
 
+class ActivationQueue:
+    def __init__(self, length):
+        self.list = []
+        self.length = length
+
+    def add(self, activations):
+        self.list.insert(0, activations)
+        while len(self.list) > self.length:
+            self.list.pop()
+    
+    def sparsity_coefficient_factor(self, last_p, next_p):
+        list_as_tensor = torch.Tensor(self.list).to(device)
+        return torch.sum(list_as_tensor**last_p) / torch.sum(list_as_tensor**next_p)
+
+class P_Annealing_SAE(SAEAnthropic):
+    def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, anneal_start: int, window_start_trim: int, window_end_trim: int, p_end=0.2, queue_length=10, decoder_initialization_scale=0.1):
+        super().__init__(gpt, feature_ratio, sparsity_coefficient, window_start_trim, window_end_trim, decoder_initialization_scale)
+        self.p = 1
+        self.anneal_start = anneal_start
+        self.p_end = p_end
+        self.queue = ActivationQueue(queue_length)
+    
+    def training_prep(self, train_dataset=None, eval_dataset=None, batch_size=None, num_epochs=None):
+        num_steps = len(train_dataset) * num_epochs / batch_size
+        self.p_step = (1 - self.p_end)/(num_steps - self.anneal_start)
+        return
+    
+    def after_step_update(self, hidden_layer=None, step = None):
+        if self.anneal_start - step <= self.queue.length:
+            self.queue.add(hidden_layer)
+        if step >= self.anneal_start:
+            next_p = self.p - self.p_step
+            self.sparsity_coefficient *= self.queue.sparsity_coefficient_factor(self.p, next_p)
+            self.p = next_p
+        return
+    
+    def sparsity_loss_function(self, hidden_layer):
+        return torch.norm(hidden_layer, p=self.p, dim=-1).sum() / hidden_layer.numel()
 
 class Smoothed_L0_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, epsilon: float, delta: float, window_start_trim: int, window_end_trim: int):
