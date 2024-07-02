@@ -1,4 +1,5 @@
 import torch 
+from torch.nn import functional as F
 import logging
 from abc import ABC, abstractmethod
 from tqdm import tqdm
@@ -44,7 +45,7 @@ class SAETemplate(torch.nn.Module, ABC):
         window_length=input.shape[1]
         return input[:, (self.window_start_trim+offset):(window_length-self.window_end_trim+offset+1), :]
 
-    def forward_on_tokens(self, token_sequences):
+    def forward_on_tokens(self, token_sequences, compute_loss=False):
         '''
         runs the SAE on a token sequence
 
@@ -57,15 +58,7 @@ class SAETemplate(torch.nn.Module, ABC):
         raw_residual_stream=self.gpt(token_sequences)
         trimmed_residual_stream=self.trim_to_window(raw_residual_stream)
         normalized_residual_stream=(trimmed_residual_stream-self.residual_stream_mean)/self.average_residual_stream_norm
-        residual_stream, hidden_layer, reconstructed_residual_stream=self.forward(normalized_residual_stream)
-        return residual_stream, hidden_layer, reconstructed_residual_stream
-
-    def forward_on_tokens_with_loss(self, token_sequences):
-        '''
-        runs the SAE on a token sequence, also returning the loss
-        '''
-        residual_stream, hidden_layer, reconstructed_residual_stream=self.forward_on_tokens(token_sequences)
-        loss = self.loss_function(residual_stream, hidden_layer, reconstructed_residual_stream)
+        loss, residual_stream, hidden_layer, reconstructed_residual_stream = self.forward(normalized_residual_stream, compute_loss=compute_loss)
         return loss, residual_stream, hidden_layer, reconstructed_residual_stream
 
     def catenate_outputs_on_dataset(self, dataset:CharDataset, batch_size=8, include_loss=False):
@@ -79,11 +72,9 @@ class SAETemplate(torch.nn.Module, ABC):
         test_dataloader=iter(torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False))
         for test_input, test_labels in test_dataloader:
             test_input=test_input.to(device)
+            loss, residual_stream, hidden_layer, reconstructed_residual_stream = self.forward_on_tokens(test_input, compute_loss=include_loss)
             if include_loss:
-                loss, residual_stream, hidden_layer, reconstructed_residual_stream = self.forward_on_tokens_with_loss(test_input)
                 losses.append(loss)
-            else:
-                residual_stream, hidden_layer, reconstructed_residual_stream = self.forward_on_tokens(test_input)
             residual_streams.append(residual_stream)
             hidden_layers.append(hidden_layer)
             reconstructed_residual_streams.append(reconstructed_residual_stream)
@@ -142,7 +133,7 @@ class SAETemplate(torch.nn.Module, ABC):
                 step+=1
                 self.num_data_trained_on+=len(input_batch)
                 optimizer.zero_grad(set_to_none=True)
-                loss, residual_stream, hidden_layer, reconstructed_residual_stream= self.forward_on_tokens_with_loss(input_batch)
+                loss, residual_stream, hidden_layer, reconstructed_residual_stream= self.forward_on_tokens(input_batch, compute_loss=True)
                 loss.backward()
                 optimizer.step()
                 if step % report_on_batch_number==0:
@@ -187,21 +178,15 @@ class SAETemplate(torch.nn.Module, ABC):
         return ["No model-specific features"]
 
     @abstractmethod
-    def forward(self, residual_stream):
+    def forward(self, residual_stream, compute_loss=False):
         '''
         takes the trimmed residual stream of a language model (as produced by run_gpt_and_trim) and runs the SAE
-        must return a tuple (residual_stream, hidden_layer, reconstructed_residual_stream)
+        must return a tuple (loss, residual_stream, hidden_layer, reconstructed_residual_stream)
+        if compute_loss is False, loss is None
         residual_stream is shape (B, W, D), where B is batch size, W is (trimmed) window length, and D is the dimension of the model:
             - residual_stream is unchanged, of size (B, W, D)
             - hidden_layer is of shape (B, W, D') where D' is the size of the hidden layer
             - reconstructed_residual_stream is shape (B, W, D) 
-        '''
-        pass
-
-    @abstractmethod
-    def loss_function(self, residual_stream, hidden_layer, reconstructed_residual_stream):
-        '''
-        loss function which depends solely on the sae, residual stream, hidden layer, and reconstruction
         '''
         pass
 
@@ -301,12 +286,10 @@ class SAEPretrainedProbes(SAETemplate):
         probe.load_state_dict(torch.load(probe_path, map_location=device))
         self.probe = probe.to(device)
 
-    def forward(self, residual_stream):
+    def forward(self, residual_stream, compute_loss=False):
         logits = self.probe.proj(residual_stream)
-        return (residual_stream, logits, residual_stream)
-    
-    def loss_function(self, residual_stream, hidden_layer, reconstructed_residual_stream):
-        return 0.0
+        loss = None
+        return loss, residual_stream, logits, residual_stream
 
 
 class SAEAnthropic(SAETemplate):
@@ -324,10 +307,14 @@ class SAEAnthropic(SAETemplate):
         self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
 
 
-    def forward(self, residual_stream):
+    def forward(self, residual_stream, compute_loss=False):
         hidden_layer=self.activation_function(residual_stream @ self.encoder + self.encoder_bias)
         reconstructed_residual_stream=hidden_layer @ self.decoder + self.decoder_bias
-        return residual_stream, hidden_layer, reconstructed_residual_stream
+        if compute_loss:
+            loss = self.loss_function(residual_stream, hidden_layer, reconstructed_residual_stream)
+        else:
+            loss = None
+        return loss, residual_stream, hidden_layer, reconstructed_residual_stream
     
     def loss_function(self, residual_stream, hidden_layer, reconstructed_residual_stream):
         reconstruction_loss=self.reconstruction_error(residual_stream, reconstructed_residual_stream)
@@ -336,7 +323,7 @@ class SAEAnthropic(SAETemplate):
         return total_loss
 
     def activation_function(self, encoder_output):
-        return torch.nn.functional.relu(encoder_output)
+        return F.relu(encoder_output)
 
     def sparsity_loss_function(self, hidden_layer):
         decoder_row_norms=self.decoder.norm(dim=1)
@@ -344,7 +331,6 @@ class SAEAnthropic(SAETemplate):
     
     def report_model_specific_features(self):
         return [f"Sparsity loss coefficient: {self.sparsity_coefficient}"]
-
 
 class SAEDummy(SAETemplate):
     '''
@@ -355,11 +341,50 @@ class SAEDummy(SAETemplate):
         super().__init__(gpt=gpt, num_features=num_features)
         self.to(device)
 
-    def forward(self, residual_stream):
-        return residual_stream,residual_stream,residual_stream
+    def forward(self, residual_stream, compute_loss=False):
+        return None, residual_stream,residual_stream,residual_stream
 
-    def loss_function(self, residual_stream, hidden_layer, reconstructed_residual_stream):
-        return torch.zeros((1))
+#supported variants: mag_in_aux_loss, relu_only
+class Gated_SAE(SAEAnthropic):
+    def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, window_start_trim: int, window_end_trim: int, no_aux_loss=False, decoder_initialization_scale=0.1):
+        super().__init__(gpt, feature_ratio, sparsity_coefficient, window_start_trim, window_end_trim, decoder_initialization_scale)
+        self.b_gate = self.encoder_bias #just renaming to make this more clear
+        self.r_mag = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
+        self.b_mag = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
+        self.no_aux_loss = no_aux_loss
+
+    def forward(self, residual_stream, compute_loss=False):
+        if self.no_aux_loss:
+            encoder = F.normalize(self.encoder, p=2, dim=1)
+        else:
+            encoder = self.encoder
+        encoding = residual_stream @ encoder
+        if self.no_aux_loss:
+            hidden_layer = (F.relu(encoding + self.b_gate) - self.b_gate) * torch.exp(self.r_mag) + self.b_mag
+        else:
+            hidden_layer_before_gating = encoding * torch.exp(self.r_mag) + self.b_mag
+            hidden_layer = ((encoding + self.b_gate) > 0) * hidden_layer_before_gating
+        normalized_decoder = F.normalize(self.decoder, p=2, dim=1)
+        reconstructed_residual_stream = hidden_layer @ normalized_decoder + self.decoder_bias
+
+        if compute_loss:
+            reconstruction_loss=self.reconstruction_error(residual_stream, reconstructed_residual_stream)
+
+            hidden_layer_without_gating_or_mag = F.relu(encoding+self.b_gate)
+            sparsity_loss = self.sparsity_loss_function(hidden_layer_without_gating_or_mag)*self.sparsity_coefficient
+
+            if self.no_aux_loss:
+                auxiliary_loss = 0.0
+            else:
+                reconstruction_without_gating = hidden_layer_without_gating_or_mag @ normalized_decoder.detach() + self.decoder_bias.detach() #seriously, this doesn't use r_mag or b_mag????
+                auxiliary_loss = self.reconstruction_error(residual_stream, reconstruction_without_gating)
+            loss = reconstruction_loss + sparsity_loss + auxiliary_loss
+        else:
+            loss = None
+        return loss, residual_stream, hidden_layer, reconstructed_residual_stream
+    
+    def sparsity_loss_function(self, gated_activations):
+        return torch.mean(gated_activations)
 
 
 class Smoothed_L0_SAE(SAETemplate):
@@ -369,9 +394,11 @@ class Smoothed_L0_SAE(SAETemplate):
         self.delta = delta
 
     def sparsity_loss_function(self, hidden_layer):
+        decoder_row_norms=self.decoder.norm(dim=1)
+        normalized_hidden_layer = hidden_layer*decoder_row_norms #does doing this just like in SAEAnthropic make sense?
         functions = [CallableConstant(0.0), CallableConstant(1.0)]
         transitions = [{"x":self.epsilon, "epsilon":self.epsilon, "delta":self.delta, "focus":"left"}]
-        return torch.mean(smoothed_piecewise(hidden_layer, functions, transitions), dim=-1)
+        return torch.mean(smoothed_piecewise(normalized_hidden_layer, functions, transitions), dim=-1)
     
 class Without_TopK_SAE(SAETemplate):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int, window_start_trim: int, window_end_trim: int):
@@ -380,16 +407,17 @@ class Without_TopK_SAE(SAETemplate):
         self.p = p
 
     def sparsity_loss_function(self, hidden_layer):
-        top_k_indices = torch.topk(torch.abs(hidden_layer), self.k, dim=-1).indices
+        decoder_row_norms=self.decoder.norm(dim=1)
+        normalized_hidden_layer = hidden_layer*decoder_row_norms #does doing this just like in SAEAnthropic make sense?
+        top_k_indices = torch.topk(torch.abs(hidden_layer), self.k, dim=-1).indices #should we find topk from hidden_layer or normalized_hidden_layer?
         top_k_mask = torch.ones(hidden_layer.shape).to(device).scatter_(-1, top_k_indices, 0)
-        without_top_k = hidden_layer * top_k_mask
+        without_top_k = normalized_hidden_layer * top_k_mask
         return torch.mean(torch.norm(without_top_k, p=self.p, dim=-1))
 
     
 # class No_Sparsity_Loss_SAE(SAETemplate):
 #     def __init__(self, gpt: GPTforProbing, num_features: int, window_start_trim: int, window_end_trim: int):
 #         super().__init__(gpt, num_features, 0.0, window_start_trim, window_end_trim)
-
 #     def sparsity_loss_function(self, hidden_layer):
 #         return 0.0
     
