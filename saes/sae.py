@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torcheval.metrics import BinaryAUROC
-from scipy.stats import ttest_ind, ttest_ind_from_stats
 
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
 from EWOthello.mingpt.probe_model import BatteryProbeClassification
@@ -20,9 +19,10 @@ class SAETemplate(torch.nn.Module, ABC):
     abstract base class that defines the SAE contract
     '''
 
-    def __init__(self, gpt:GPTforProbing, window_start_trim:int, window_end_trim:int):
+    def __init__(self, gpt:GPTforProbing, num_features:int, window_start_trim:int=4, window_end_trim:int=8):
         super().__init__()
         self.gpt=gpt
+        self.num_features=num_features
         for param in self.gpt.parameters():
             #freezes the gpt model  
             param.requires_grad=False 
@@ -111,7 +111,7 @@ class SAETemplate(torch.nn.Module, ABC):
         reconstruction_loss=(reconstruction_l2**2).mean()
         return reconstruction_loss
 
-    def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=1, report_every_n_steps=500, fixed_seed=1337):
+    def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=1, report_every_n_steps=500, learning_rate=1e-3, fixed_seed=1337):
         '''
         performs a training loop on self, with printed evaluations
         '''
@@ -119,8 +119,9 @@ class SAETemplate(torch.nn.Module, ABC):
             torch.manual_seed(fixed_seed)
         self.to(device)
         self.train()
-        optimizer=torch.optim.AdamW(self.parameters(), lr=1e-3)
+        optimizer=torch.optim.AdamW(self.parameters(), lr=learning_rate)
         step=0
+        report_on_batch_number=report_every_n_steps//batch_size
         print(f"Beginning model training on {device}!")
 
         for epoch in range(num_epochs):
@@ -135,24 +136,26 @@ class SAETemplate(torch.nn.Module, ABC):
                 loss, residual_stream, hidden_layer, reconstructed_residual_stream= self.forward_on_tokens(input_batch, compute_loss=True)
                 loss.backward()
                 optimizer.step()
-                if step % report_every_n_steps==0:
+                if step % report_on_batch_number==0:
                     self.print_evaluation(loss, eval_dataset, step_number=step)
         else:
             self.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
+        self.eval()
 
     def model_specs_to_string(self, eval_dataset=None):
         '''
         returns a string representation of the model
         '''
         information=[f"Model type: {type(self)}", 
+                     f"Number of features: {self.num_features}", 
                      f"Number of parameters: {sum([param.numel() for param in self.parameters()])}", 
                      f"Number of games trained on: {self.num_data_trained_on}"]
         information.extend(self.report_model_specific_features())
-        information.extend([
-                            f"Number of SMD>2 classifiers (None=not evaluated): {self.num_classifier_above_threshold(metric_name='classifier_smds', threshold=2)}",
-                            f"Average classifer SMD (None=not evaluated): {self.average_classifier_score(metric_name='classifier_smds')}",
-                            f"Number of AUROC>.9 classifiers (None=not evaluated): {self.num_classifier_above_threshold()}",
-                            f"Average classifer AUROC (None=not evaluated): {self.average_classifier_score()}",
+        information.extend([f"Classifications:",
+                            f"    Number of SMD>2 classifiers (None=not evaluated): {self.num_classifier_above_threshold(metric_name='classifier_smds', threshold=2)}",
+                            f"    Average classifer SMD (None=not evaluated): {self.average_classifier_score(metric_name='classifier_smds')}",
+                            f"    Number of AUROC>.9 classifiers (None=not evaluated): {self.num_classifier_above_threshold()}",
+                            f"    Average classifer AUROC (None=not evaluated): {self.average_classifier_score()}",
                             ])
         if eval_dataset:
             losses, residual_streams, hidden_layers, reconstructed_residual_streams=self.catenate_outputs_on_dataset(eval_dataset, include_loss=True)
@@ -162,8 +165,8 @@ class SAETemplate(torch.nn.Module, ABC):
             reconstruction_error=self.reconstruction_error(residual_streams, reconstructed_residual_streams)
             information.extend([
                 f"Results of evaluation on {len(eval_dataset)} games ({residual_streams.shape[0]*residual_streams.shape[1]} activations):", 
-                f"    Loss: {test_loss:.2f}", 
-                f"    Reconstruction Loss: {reconstruction_error:.2f}",
+                f"    Loss: {test_loss:.3f}", 
+                f"    Reconstruction Loss: {reconstruction_error:.3f}",
                 f"    L0 Sparsity: {l0_sparsity:.1f}", 
                 f"    Dead features: {dead_features:.0f}", ])
         return "\n".join(information)
@@ -187,6 +190,7 @@ class SAETemplate(torch.nn.Module, ABC):
         '''
         pass
 
+    @torch.inference_mode()
     def compute_all_aurocs(self, evaluation_dataset:DataLoader, alternate_players=True):
         '''
         computes aurocs of each sae feature on the entire evaluation_dataset
@@ -209,9 +213,12 @@ class SAETemplate(torch.nn.Module, ABC):
                     ended_game_mask= board_position>-100
                     metric = BinaryAUROC()
                     metric.update(feature_activation[ended_game_mask], is_target_piece[ended_game_mask].int())
-                    aurocs[i,j,k]=float(metric.compute())
+                    this_auroc=float(metric.compute())
+                    this_auroc_rectified=max(this_auroc, 1-this_auroc)
+                    aurocs[i,j,k]=this_auroc_rectified
         self.classifier_aurocs=aurocs
 
+    @torch.inference_mode()
     def compute_all_smd(self, evaluation_dataset:DataLoader, alternate_players=True):
         '''
         computes aurocs of each sae feature on the entire evaluation_dataset
@@ -237,7 +244,8 @@ class SAETemplate(torch.nn.Module, ABC):
                     is_target_piece=board_position==piece_class
                     first_mean=feature_activation[is_target_piece].mean()
                     second_mean=feature_activation[~ is_target_piece].mean()
-                    standardized_mean_distances[i,j,k]=torch.abs(first_mean-second_mean)/feature_stdev
+                    smd=torch.abs(first_mean-second_mean)/feature_stdev
+                    standardized_mean_distances[i,j,k]=smd
         self.classifier_smds=standardized_mean_distances
 
     def num_classifier_above_threshold(self, metric_name="classifier_aurocs", threshold=.9):
@@ -286,17 +294,15 @@ class SAEPretrainedProbes(SAETemplate):
 
 class SAEAnthropic(SAETemplate):
 
-    def __init__(self, gpt:GPTforProbing, feature_ratio:int, sparsity_coefficient:float, window_start_trim:int, window_end_trim:int, decoder_initialization_scale=0.1):
-        super().__init__(gpt=gpt, window_start_trim=window_start_trim, window_end_trim=window_end_trim)
-        self.feature_ratio=feature_ratio
+    def __init__(self, gpt:GPTforProbing, num_features:int, sparsity_coefficient:float, decoder_initialization_scale=0.1):
+        super().__init__(gpt=gpt, num_features=num_features)
         self.sparsity_coefficient=sparsity_coefficient
         residual_stream_size=gpt.pos_emb.shape[-1]
-        self.hidden_layer_size=residual_stream_size*feature_ratio
-        decoder_initial_value=torch.randn((self.hidden_layer_size, residual_stream_size))
+        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
         decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
         decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
         self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
-        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.hidden_layer_size)))
+        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
         self.decoder=torch.nn.Parameter(decoder_initial_value)
         self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
 
@@ -324,15 +330,15 @@ class SAEAnthropic(SAETemplate):
         return torch.mean(hidden_layer*decoder_row_norms)
     
     def report_model_specific_features(self):
-        return [f"Hidden layer size: {self.hidden_layer_size}",f"Sparsity loss coefficient: {self.sparsity_coefficient}"]
+        return [f"Sparsity loss coefficient: {self.sparsity_coefficient}"]
 
 class SAEDummy(SAETemplate):
     '''
     "SAE" whose hidden layer and reconstruction is just the unchanged residual stream
     '''
 
-    def __init__(self, gpt:GPTforProbing, window_start_trim:int=4, window_end_trim:int=8):
-        super().__init__(gpt=gpt, window_start_trim=window_start_trim, window_end_trim=window_end_trim)
+    def __init__(self, gpt:GPTforProbing, num_features=1024):
+        super().__init__(gpt=gpt, num_features=num_features)
         self.to(device)
 
     def forward(self, residual_stream, compute_loss=False):
@@ -381,9 +387,9 @@ class Gated_SAE(SAEAnthropic):
         return torch.mean(gated_activations)
 
 
-class Smoothed_L0_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, epsilon: float, delta: float, window_start_trim: int, window_end_trim: int):
-        super().__init__(gpt, feature_ratio, sparsity_coefficient, window_start_trim, window_end_trim)
+class Smoothed_L0_SAE(SAETemplate):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, epsilon: float, delta: float, window_start_trim: int, window_end_trim: int):
+        super().__init__(gpt, num_features, sparsity_coefficient, window_start_trim, window_end_trim)
         self.epsilon = epsilon
         self.delta = delta
 
@@ -394,9 +400,9 @@ class Smoothed_L0_SAE(SAEAnthropic):
         transitions = [{"x":self.epsilon, "epsilon":self.epsilon, "delta":self.delta, "focus":"left"}]
         return torch.mean(smoothed_piecewise(normalized_hidden_layer, functions, transitions), dim=-1)
     
-class Without_TopK_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, k: int, p: int, window_start_trim: int, window_end_trim: int):
-        super().__init__(gpt, feature_ratio, sparsity_coefficient, window_start_trim, window_end_trim)
+class Without_TopK_SAE(SAETemplate):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int, window_start_trim: int, window_end_trim: int):
+        super().__init__(gpt, num_features, sparsity_coefficient, window_start_trim, window_end_trim)
         self.k = k
         self.p = p
 
@@ -409,31 +415,57 @@ class Without_TopK_SAE(SAEAnthropic):
         return torch.mean(torch.norm(without_top_k, p=self.p, dim=-1))
 
     
-class No_Sparsity_Loss_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, feature_ratio: int, window_start_trim: int, window_end_trim: int):
-        super().__init__(gpt, feature_ratio, 0.0, window_start_trim, window_end_trim)
-
-    def sparsity_loss_function(self, hidden_layer):
-        return 0.0
+# class No_Sparsity_Loss_SAE(SAETemplate):
+#     def __init__(self, gpt: GPTforProbing, num_features: int, window_start_trim: int, window_end_trim: int):
+#         super().__init__(gpt, num_features, 0.0, window_start_trim, window_end_trim)
+#     def sparsity_loss_function(self, hidden_layer):
+#         return 0.0
     
-class Leaky_Topk_SAE(No_Sparsity_Loss_SAE):
-    def __init__(self, gpt: GPTforProbing, feature_ratio: int, epsilon: float, k:int, window_start_trim: int, window_end_trim: int):
-        super().__init__(gpt, feature_ratio, window_start_trim, window_end_trim)
+class Leaky_Topk_SAE(SAETemplate):
+    def __init__(self, gpt: GPTforProbing, num_features: int, epsilon: float, k:int, decoder_initialization_scale=0.1):
+        super().__init__(gpt=gpt, num_features=num_features)
         self.epsilon = epsilon
         self.k=k
+        residual_stream_size=gpt.pos_emb.shape[-1]
+        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
+        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
+        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
+        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
+        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
+        self.decoder=torch.nn.Parameter(decoder_initial_value)
+        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
 
     def activation_function(self, encoder_output):
         kth_value = torch.topk(torch.abs(encoder_output), k=self.k).values.min(dim=-1).values
         return suppress_lower_activations(encoder_output, kth_value, epsilon=self.epsilon)
+    
+    def forward(self, residual_stream):
+        '''
+        takes the trimmed residual stream of a language model (as produced by run_gpt_and_trim) and runs the SAE
+        must return a tuple (residual_stream, hidden_layer, reconstructed_residual_stream)
+        residual_stream is shape (B, W, D), where B is batch size, W is (trimmed) window length, and D is the dimension of the model:
+            - residual_stream is unchanged, of size (B, W, D)
+            - hidden_layer is of shape (B, W, D') where D' is the size of the hidden layer
+            - reconstructed_residual_stream is shape (B, W, D) 
+        '''
+        hidden_layer=self.activation_function(residual_stream @ self.encoder + self.encoder_bias)
+        reconstructed_residual_stream=hidden_layer @ self.decoder + self.decoder_bias
+        return residual_stream, hidden_layer, reconstructed_residual_stream
 
-class Dimension_Reduction_SAE(No_Sparsity_Loss_SAE):
-    def __init__(self, gpt: GPTforProbing, feature_ratio: int, start_index: int, start_proportion: float, end_proportion: float, epsilon: float, window_start_trim: int, window_end_trim: int):
-        super().__init__(gpt, feature_ratio, window_start_trim, window_end_trim)
+    def loss_function(self, residual_stream, hidden_layer, reconstructed_residual_stream):
+        return self.reconstruction_error(residual_stream, reconstructed_residual_stream)
+
+    def report_model_specific_features(self):
+        return [f"k (sparsity): {self.k}", f"Epsilon (leakyness): {self.epsilon}"]
+
+class Dimension_Reduction_SAE(SAETemplate):
+    def __init__(self, gpt: GPTforProbing, num_features: int, start_index: int, start_proportion: float, end_proportion: float, epsilon: float, window_start_trim: int, window_end_trim: int):
+        super().__init__(gpt, num_features, window_start_trim, window_end_trim)
         self.start_index = start_index
         self.start_proportion = start_proportion
         self.end_proportion = end_proportion
         self.epsilon = epsilon
-        self.activation_f = reduce_dimensions_activation(Expand(self.start_index, self.start_proportion, self.end_proportion), max_n = self.hidden_layer_size, epsilon=self.epsilon)
+        self.activation_f = reduce_dimensions_activation(Expand(self.start_index, self.start_proportion, self.end_proportion), max_n = self.num_features, epsilon=self.epsilon)
 
     def activation_function(self, encoder_output):
         return self.activation_f(encoder_output)
