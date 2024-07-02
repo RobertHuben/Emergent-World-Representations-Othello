@@ -292,8 +292,8 @@ class SAETemplate(torch.nn.Module, ABC):
         return float(torch.mean(best_scores))
     
 class SAEPretrainedProbes(SAETemplate):
-    def __init__(self, gpt: GPTforProbing, probe_layer: int, window_start_trim: int, window_end_trim: int):
-        super().__init__(gpt, window_start_trim, window_end_trim)
+    def __init__(self, gpt: GPTforProbing, probe_layer: int):
+        super().__init__(gpt)
         self.gpt.to(device)
 
         residual_stream_size=gpt.pos_emb.shape[-1]
@@ -361,8 +361,8 @@ class SAEDummy(SAETemplate):
 
 #supported variants: mag_in_aux_loss, relu_only
 class Gated_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, window_start_trim: int, window_end_trim: int, no_aux_loss=False, decoder_initialization_scale=0.1):
-        super().__init__(gpt, num_features, sparsity_coefficient, window_start_trim, window_end_trim, decoder_initialization_scale)
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, no_aux_loss=False, decoder_initialization_scale=0.1):
+        super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
         self.b_gate = self.encoder_bias #just renaming to make this more clear
         self.r_mag = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
         self.b_mag = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
@@ -416,8 +416,8 @@ class ActivationQueue:
         return torch.sum(list_as_tensor**last_p) / torch.sum(list_as_tensor**next_p)
 
 class P_Annealing_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, anneal_start: int, window_start_trim: int, window_end_trim: int, p_end=0.2, queue_length=10, decoder_initialization_scale=0.1):
-        super().__init__(gpt, num_features, sparsity_coefficient, window_start_trim, window_end_trim, decoder_initialization_scale)
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, anneal_start: int, p_end=0.2, queue_length=10, decoder_initialization_scale=0.1):
+        super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
         self.p = 1
         self.anneal_start = anneal_start
         self.p_end = p_end
@@ -441,8 +441,8 @@ class P_Annealing_SAE(SAEAnthropic):
         return torch.norm(hidden_layer, p=self.p, dim=-1).sum() / hidden_layer.numel()
 
 class Smoothed_L0_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, epsilon: float, delta: float, window_start_trim: int, window_end_trim: int):
-        super().__init__(gpt, num_features, sparsity_coefficient, window_start_trim, window_end_trim)
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, epsilon: float, delta: float):
+        super().__init__(gpt, num_features, sparsity_coefficient)
         self.epsilon = epsilon
         self.delta = delta
 
@@ -453,9 +453,9 @@ class Smoothed_L0_SAE(SAEAnthropic):
         transitions = [{"x":self.epsilon, "epsilon":self.epsilon, "delta":self.delta, "focus":"left"}]
         return torch.mean(smoothed_piecewise(normalized_hidden_layer, functions, transitions))
     
-class Without_TopK_SAE(SAETemplate):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int, window_start_trim: int, window_end_trim: int):
-        super().__init__(gpt, num_features, sparsity_coefficient, window_start_trim, window_end_trim)
+class Without_TopK_SAE(SAEAnthropic):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int):
+        super().__init__(gpt, num_features, sparsity_coefficient)
         self.k = k
         self.p = p
 
@@ -512,8 +512,8 @@ class Leaky_Topk_SAE(SAETemplate):
         return [f"k (sparsity): {self.k}", f"Epsilon (leakyness): {self.epsilon}"]
 
 class Dimension_Reduction_SAE(SAETemplate):
-    def __init__(self, gpt: GPTforProbing, num_features: int, start_index: int, start_proportion: float, end_proportion: float, epsilon: float, window_start_trim: int, window_end_trim: int):
-        super().__init__(gpt, num_features, window_start_trim, window_end_trim)
+    def __init__(self, gpt: GPTforProbing, num_features: int, start_index: int, start_proportion: float, end_proportion: float, epsilon: float):
+        super().__init__(gpt, num_features)
         self.start_index = start_index
         self.start_proportion = start_proportion
         self.end_proportion = end_proportion
