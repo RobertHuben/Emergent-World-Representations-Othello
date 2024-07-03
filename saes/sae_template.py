@@ -14,7 +14,6 @@ from board_states import get_board_states
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
-
 class SAETemplate(torch.nn.Module, ABC):
     '''
     abstract base class that defines the SAE contract
@@ -93,7 +92,7 @@ class SAETemplate(torch.nn.Module, ABC):
         test_loss=losses.mean()
         l0_sparsity=self.compute_l0_sparsity(hidden_layers)
         dead_features=self.count_dead_features(hidden_layers)
-        print_message=f"Train loss, test loss, l0 sparsity, dead features after {step_number} steps: {train_loss.item():.2f}, {test_loss:.2f}, {l0_sparsity:.1f}, {dead_features:.0f}"
+        print_message=f"Train loss, test loss, l0 sparsity, dead features after {self.num_data_trained_on} training games: {train_loss.item():.2f}, {test_loss:.2f}, {l0_sparsity:.1f}, {dead_features:.0f}"
         tqdm.write(print_message)
 
     def compute_l0_sparsity(self, hidden_layers):
@@ -112,7 +111,7 @@ class SAETemplate(torch.nn.Module, ABC):
         reconstruction_loss=(reconstruction_l2**2).mean()
         return reconstruction_loss
 
-    def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=1, report_every_n_steps=500, learning_rate=1e-3, fixed_seed=1337):
+    def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=1, report_every_n_data=500, learning_rate=1e-3, fixed_seed=1337):
         '''
         performs a training loop on self, with printed evaluations
         '''
@@ -122,14 +121,15 @@ class SAETemplate(torch.nn.Module, ABC):
         self.train()
         optimizer=torch.optim.AdamW(self.parameters(), lr=learning_rate)
         step=0
-        report_on_batch_number=report_every_n_steps//batch_size
+        report_on_batch_number=report_every_n_data//batch_size
 
         self.training_prep(train_dataset=train_dataset, eval_dataset=eval_dataset, batch_size=batch_size, num_epochs=num_epochs)
 
         print(f"Beginning model training on {device}!")
+
         for epoch in range(num_epochs):
             train_dataloader=iter(torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True))
-            print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_steps} steps.")
+            print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_data*batch_size} games.")
             
             for input_batch, label_batch in tqdm(train_dataloader):
                 input_batch=input_batch.to(device)
@@ -146,6 +146,7 @@ class SAETemplate(torch.nn.Module, ABC):
                     self.print_evaluation(loss, eval_dataset, step_number=step)
         else:
             self.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
+        self.eval()
 
     def training_prep(self, train_dataset=None, eval_dataset=None, batch_size=None, num_epochs=None):
         '''
@@ -291,3 +292,20 @@ class SAETemplate(torch.nn.Module, ABC):
             return None
         best_scores=metric.max(dim=0).values
         return float(torch.mean(best_scores))
+    
+class SAEPretrainedProbes(SAETemplate):
+    def __init__(self, gpt: GPTforProbing, probe_layer: int, window_start_trim: int, window_end_trim: int):
+        super().__init__(gpt, window_start_trim, window_end_trim)
+        self.gpt.to(device)
+
+        residual_stream_size=gpt.pos_emb.shape[-1]
+        probe = BatteryProbeClassification(device, probe_class=3, num_task=64, input_dim=residual_stream_size)
+        probe_path = f"EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/linearProbe_Map_New_8L8H_GPT_Layer{probe_layer}.ckpt"
+        probe.load_state_dict(torch.load(probe_path, map_location=device))
+        self.probe = probe.to(device)
+
+    def forward(self, residual_stream, compute_loss=False):
+        logits = self.probe.proj(residual_stream)
+        loss = None
+        return loss, residual_stream, logits, residual_stream
+

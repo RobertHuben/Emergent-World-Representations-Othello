@@ -1,15 +1,8 @@
 import torch 
 from torch.nn import functional as F
 import logging
-from abc import ABC, abstractmethod
-from tqdm import tqdm
-from torch.utils.data import DataLoader
-from torcheval.metrics import BinaryAUROC
 
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
-from EWOthello.mingpt.probe_model import BatteryProbeClassification
-from EWOthello.mingpt.dataset import CharDataset
-from board_states import get_board_states
 from sae_template import SAETemplate
 
 logger = logging.getLogger(__name__)
@@ -228,19 +221,13 @@ class Leaky_Topk_SAE(SAETemplate):
         '''
         hidden_layer=self.activation_function(residual_stream @ self.encoder + self.encoder_bias)
         reconstructed_residual_stream=hidden_layer @ self.decoder + self.decoder_bias
-        if compute_loss:
-            loss = self.loss_function(residual_stream, hidden_layer, reconstructed_residual_stream)
-        else:
-            loss = None
+        loss= self.reconstruction_error(residual_stream, reconstructed_residual_stream) if compute_loss else None
         return loss, residual_stream, hidden_layer, reconstructed_residual_stream
-
-    def loss_function(self, residual_stream, hidden_layer, reconstructed_residual_stream):
-        return self.reconstruction_error(residual_stream, reconstructed_residual_stream)
 
     def report_model_specific_features(self):
         return [f"k (sparsity): {self.k}", f"Epsilon (leakyness): {self.epsilon}"]
 
-class Dimension_Reduction_SAE(SAETemplate):
+class Dimension_Reduction_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, start_index: int, start_proportion: float, end_proportion: float, epsilon: float):
         super().__init__(gpt, num_features)
         self.start_index = start_index
@@ -316,6 +303,7 @@ class reduce_dimensions_activation(object):
             n_or_2 = torch.maximum(n, 2*torch.ones(n.shape).to(device))
             bound_constant = 1 - self.a(n_or_2-1)/self.a(n_or_2)
             new_remaining = 1*(t*remaining_mask > torch.unsqueeze(torch.sum(t*remaining_mask, dim=-1) * bound_constant, dim=-1))
+
             finished_mask = torch.logical_or(torch.eq(remaining_mask, new_remaining), torch.unsqueeze(torch.eq(n, torch.ones(n.shape).to(device)), dim=-1)) #finished if, for each set of activations, either no updates this loop or n = 1
             if torch.sum(~finished_mask) == 0:
                 break
