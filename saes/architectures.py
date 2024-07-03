@@ -186,7 +186,7 @@ class Without_TopK_SAE(SAEAnthropic):
     def sparsity_loss_function(self, hidden_layer):
         decoder_row_norms=self.decoder.norm(dim=1)
         normalized_hidden_layer = hidden_layer*decoder_row_norms #does doing this just like in SAEAnthropic make sense?
-        top_k_indices = torch.topk(torch.abs(hidden_layer), self.k, dim=-1).indices #should we find topk from hidden_layer or normalized_hidden_layer?
+        top_k_indices = torch.topk(hidden_layer, self.k, dim=-1).indices #should we find topk from hidden_layer or normalized_hidden_layer?
         top_k_mask = torch.ones(hidden_layer.shape).to(device).scatter_(-1, top_k_indices, 0)
         without_top_k = normalized_hidden_layer * top_k_mask
         return torch.mean(torch.norm(without_top_k, p=self.p, dim=-1))
@@ -213,7 +213,7 @@ class Leaky_Topk_SAE(SAETemplate):
         self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
 
     def activation_function(self, encoder_output):
-        kth_value = torch.topk(torch.abs(encoder_output), k=self.k).values.min(dim=-1).values
+        kth_value = torch.topk(F.relu(encoder_output), k=self.k).values.min(dim=-1).values
         return suppress_lower_activations(encoder_output, kth_value, epsilon=self.epsilon)
     
     def forward(self, residual_stream, compute_loss=False):
@@ -307,13 +307,14 @@ class reduce_dimensions_activation(object):
 
         self.a = a
 
-    def __call__(self, t):        
+    def __call__(self, t):
+        t = F.relu(t)
         remaining_mask = torch.ones(t.shape).to(device)
         while True:
             n = torch.sum(remaining_mask, dim=-1)
             n_or_2 = torch.maximum(n, 2*torch.ones(n.shape).to(device))
             bound_constant = 1 - self.a(n_or_2-1)/self.a(n_or_2)
-            new_remaining = 1*(torch.abs(t)*remaining_mask > torch.unsqueeze(torch.sum(torch.abs(t)*remaining_mask, dim=-1) * bound_constant, dim=-1))
+            new_remaining = 1*(t*remaining_mask > torch.unsqueeze(torch.sum(t*remaining_mask, dim=-1) * bound_constant, dim=-1))
             finished_mask = torch.logical_or(torch.eq(remaining_mask, new_remaining), torch.unsqueeze(torch.eq(n, torch.ones(n.shape).to(device)), dim=-1)) #finished if, for each set of activations, either no updates this loop or n = 1
             if torch.sum(~finished_mask) == 0:
                 break
@@ -322,7 +323,7 @@ class reduce_dimensions_activation(object):
         k = torch.sum(remaining_mask, dim=-1)
         k_or_plus_1_or_2 = torch.maximum(torch.unsqueeze(k, dim=-1) + 1-remaining_mask, 2*torch.ones(t.shape).to(device))
         bound_constant = 1 - self.a(k_or_plus_1_or_2-1)/self.a(k_or_plus_1_or_2)
-        bound = (torch.unsqueeze(torch.sum(torch.abs(t)*remaining_mask, dim=-1), dim=-1) + torch.abs(t) * (1 - remaining_mask)) * bound_constant
+        bound = (torch.unsqueeze(torch.sum(t*remaining_mask, dim=-1), dim=-1) + t * (1 - remaining_mask)) * bound_constant
         return k, suppress_lower_activations(t, bound, epsilon=self.epsilon, inclusive=False, mode="absolute")
 
 
