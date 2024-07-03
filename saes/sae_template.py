@@ -122,6 +122,9 @@ class SAETemplate(torch.nn.Module, ABC):
         optimizer=torch.optim.AdamW(self.parameters(), lr=learning_rate)
         step=0
         report_on_batch_number=report_every_n_data//batch_size
+
+        self.training_prep(train_dataset=train_dataset, eval_dataset=eval_dataset, batch_size=batch_size, num_epochs=num_epochs)
+
         print(f"Beginning model training on {device}!")
 
         for epoch in range(num_epochs):
@@ -136,11 +139,26 @@ class SAETemplate(torch.nn.Module, ABC):
                 loss, residual_stream, hidden_layer, reconstructed_residual_stream= self.forward_on_tokens(input_batch, compute_loss=True)
                 loss.backward()
                 optimizer.step()
+
+                self.after_step_update(hidden_layer=hidden_layer, step=step)
+
                 if step % report_on_batch_number==0:
                     self.print_evaluation(loss, eval_dataset, step_number=step)
         else:
             self.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
         self.eval()
+
+    def training_prep(self, train_dataset=None, eval_dataset=None, batch_size=None, num_epochs=None):
+        '''
+        for anything additional that needs to be done before training starts
+        '''
+        return
+    
+    def after_step_update(self, hidden_layer=None, step=None):
+        '''
+        for anything additional that needs to be done after each training step
+        '''
+        return
 
     def model_specs_to_string(self, eval_dataset=None):
         '''

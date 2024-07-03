@@ -8,7 +8,6 @@ from sae_template import SAETemplate
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
-
 class SAEAnthropic(SAETemplate):
 
     def __init__(self, gpt:GPTforProbing, num_features:int, sparsity_coefficient:float, decoder_initialization_scale=0.1):
@@ -63,11 +62,11 @@ class SAEDummy(SAETemplate):
 
 #supported variants: mag_in_aux_loss, relu_only
 class Gated_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, feature_ratio: int, sparsity_coefficient: float, window_start_trim: int, window_end_trim: int, no_aux_loss=False, decoder_initialization_scale=0.1):
-        super().__init__(gpt, feature_ratio, sparsity_coefficient, window_start_trim, window_end_trim, decoder_initialization_scale)
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, no_aux_loss=False, decoder_initialization_scale=0.1):
+        super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
         self.b_gate = self.encoder_bias #just renaming to make this more clear
-        self.r_mag = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
-        self.b_mag = torch.nn.Parameter(torch.randn(self.hidden_layer_size,))
+        self.r_mag = torch.nn.Parameter(torch.randn(num_features,))
+        self.b_mag = torch.nn.Parameter(torch.randn(num_features,))
         self.no_aux_loss = no_aux_loss
 
     def forward(self, residual_stream, compute_loss=False):
@@ -103,10 +102,48 @@ class Gated_SAE(SAEAnthropic):
     def sparsity_loss_function(self, gated_activations):
         return torch.mean(gated_activations)
 
+class ActivationQueue:
+    def __init__(self, length):
+        self.list = []
+        self.length = length
 
-class Smoothed_L0_SAE(SAETemplate):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, epsilon: float, delta: float, window_start_trim: int, window_end_trim: int):
-        super().__init__(gpt, num_features, sparsity_coefficient, window_start_trim, window_end_trim)
+    def add(self, activations):
+        self.list.insert(0, activations)
+        while len(self.list) > self.length:
+            self.list.pop()
+    
+    def sparsity_coefficient_factor(self, last_p, next_p):
+        list_as_tensor = torch.stack(self.list).to(device)
+        return torch.sum(list_as_tensor**last_p) / torch.sum(list_as_tensor**next_p)
+
+class P_Annealing_SAE(SAEAnthropic):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, anneal_start: int, p_end=0.2, queue_length=10, decoder_initialization_scale=0.1):
+        super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
+        self.p = 1
+        self.anneal_start = anneal_start
+        self.p_end = p_end
+        self.queue = ActivationQueue(queue_length)
+    
+    def training_prep(self, train_dataset=None, eval_dataset=None, batch_size=None, num_epochs=None):
+        num_steps = len(train_dataset) * num_epochs / batch_size
+        self.p_step = (1 - self.p_end)/(num_steps - self.anneal_start)
+        return
+    
+    def after_step_update(self, hidden_layer=None, step = None):
+        if self.anneal_start - step <= self.queue.length:
+            self.queue.add(hidden_layer.detach())
+        if step >= self.anneal_start:
+            next_p = self.p - self.p_step
+            self.sparsity_coefficient *= self.queue.sparsity_coefficient_factor(self.p, next_p)
+            self.p = next_p
+        return
+    
+    def sparsity_loss_function(self, hidden_layer):
+        return torch.norm(hidden_layer, p=self.p, dim=-1).sum() / hidden_layer.numel()
+
+class Smoothed_L0_SAE(SAEAnthropic):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, epsilon: float, delta: float):
+        super().__init__(gpt, num_features, sparsity_coefficient)
         self.epsilon = epsilon
         self.delta = delta
 
@@ -115,18 +152,18 @@ class Smoothed_L0_SAE(SAETemplate):
         normalized_hidden_layer = hidden_layer*decoder_row_norms #does doing this just like in SAEAnthropic make sense?
         functions = [CallableConstant(0.0), CallableConstant(1.0)]
         transitions = [{"x":self.epsilon, "epsilon":self.epsilon, "delta":self.delta, "focus":"left"}]
-        return torch.mean(smoothed_piecewise(normalized_hidden_layer, functions, transitions), dim=-1)
+        return torch.mean(smoothed_piecewise(normalized_hidden_layer, functions, transitions))
     
-class Without_TopK_SAE(SAETemplate):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int, window_start_trim: int, window_end_trim: int):
-        super().__init__(gpt, num_features, sparsity_coefficient, window_start_trim, window_end_trim)
+class Without_TopK_SAE(SAEAnthropic):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int):
+        super().__init__(gpt, num_features, sparsity_coefficient)
         self.k = k
         self.p = p
 
     def sparsity_loss_function(self, hidden_layer):
         decoder_row_norms=self.decoder.norm(dim=1)
         normalized_hidden_layer = hidden_layer*decoder_row_norms #does doing this just like in SAEAnthropic make sense?
-        top_k_indices = torch.topk(torch.abs(hidden_layer), self.k, dim=-1).indices #should we find topk from hidden_layer or normalized_hidden_layer?
+        top_k_indices = torch.topk(hidden_layer, self.k, dim=-1).indices #should we find topk from hidden_layer or normalized_hidden_layer?
         top_k_mask = torch.ones(hidden_layer.shape).to(device).scatter_(-1, top_k_indices, 0)
         without_top_k = normalized_hidden_layer * top_k_mask
         return torch.mean(torch.norm(without_top_k, p=self.p, dim=-1))
@@ -153,13 +190,14 @@ class Leaky_Topk_SAE(SAETemplate):
         self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
 
     def activation_function(self, encoder_output):
-        kth_value = torch.topk(encoder_output, k=self.k).values.min(dim=-1).values
-        return suppress_lower_activations(encoder_output, kth_value, epsilon=self.epsilon)
+        activations = F.relu(encoder_output)
+        kth_value = torch.topk(activations, k=self.k).values.min(dim=-1).values
+        return suppress_lower_activations(activations, kth_value, epsilon=self.epsilon)
     
     def forward(self, residual_stream, compute_loss=False):
         '''
         takes the trimmed residual stream of a language model (as produced by run_gpt_and_trim) and runs the SAE
-        must return a tuple (residual_stream, hidden_layer, reconstructed_residual_stream)
+        must return a tuple (loss, residual_stream, hidden_layer, reconstructed_residual_stream)
         residual_stream is shape (B, W, D), where B is batch size, W is (trimmed) window length, and D is the dimension of the model:
             - residual_stream is unchanged, of size (B, W, D)
             - hidden_layer is of shape (B, W, D') where D' is the size of the hidden layer
@@ -173,9 +211,9 @@ class Leaky_Topk_SAE(SAETemplate):
     def report_model_specific_features(self):
         return [f"k (sparsity): {self.k}", f"Epsilon (leakyness): {self.epsilon}"]
 
-class Dimension_Reduction_SAE(SAETemplate):
-    def __init__(self, gpt: GPTforProbing, num_features: int, start_index: int, start_proportion: float, end_proportion: float, epsilon: float, window_start_trim: int, window_end_trim: int):
-        super().__init__(gpt, num_features, window_start_trim, window_end_trim)
+class Dimension_Reduction_SAE(SAEAnthropic):
+    def __init__(self, gpt: GPTforProbing, num_features: int, start_index: int, start_proportion: float, end_proportion: float, epsilon: float):
+        super().__init__(gpt, num_features)
         self.start_index = start_index
         self.start_proportion = start_proportion
         self.end_proportion = end_proportion
@@ -241,13 +279,15 @@ class reduce_dimensions_activation(object):
 
         self.a = a
 
-    def __call__(self, t):        
+    def __call__(self, t):
+        t = F.relu(t)
         remaining_mask = torch.ones(t.shape).to(device)
         while True:
             n = torch.sum(remaining_mask, dim=-1)
             n_or_2 = torch.maximum(n, 2*torch.ones(n.shape).to(device))
             bound_constant = 1 - self.a(n_or_2-1)/self.a(n_or_2)
-            new_remaining = 1*(torch.abs(t)*remaining_mask > torch.unsqueeze(torch.sum(torch.abs(t)*remaining_mask, dim=-1) * bound_constant, dim=-1))
+            new_remaining = 1*(t*remaining_mask > torch.unsqueeze(torch.sum(t*remaining_mask, dim=-1) * bound_constant, dim=-1))
+
             finished_mask = torch.logical_or(torch.eq(remaining_mask, new_remaining), torch.unsqueeze(torch.eq(n, torch.ones(n.shape).to(device)), dim=-1)) #finished if, for each set of activations, either no updates this loop or n = 1
             if torch.sum(~finished_mask) == 0:
                 break
@@ -256,7 +296,7 @@ class reduce_dimensions_activation(object):
         k = torch.sum(remaining_mask, dim=-1)
         k_or_plus_1_or_2 = torch.maximum(torch.unsqueeze(k, dim=-1) + 1-remaining_mask, 2*torch.ones(t.shape).to(device))
         bound_constant = 1 - self.a(k_or_plus_1_or_2-1)/self.a(k_or_plus_1_or_2)
-        bound = (torch.unsqueeze(torch.sum(torch.abs(t)*remaining_mask, dim=-1), dim=-1) + torch.abs(t) * (1 - remaining_mask)) * bound_constant
+        bound = (torch.unsqueeze(torch.sum(t*remaining_mask, dim=-1), dim=-1) + t * (1 - remaining_mask)) * bound_constant
         return k, suppress_lower_activations(t, bound, epsilon=self.epsilon, inclusive=False, mode="absolute")
 
 
