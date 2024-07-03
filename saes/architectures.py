@@ -2,6 +2,8 @@ import torch
 from torch.nn import functional as F
 import logging
 
+import numpy as np
+
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
 from sae_template import SAETemplate
 
@@ -229,6 +231,40 @@ class K_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
             self.k_continuous += self.k_step
             self.k = round(self.k_continuous)
         return
+    
+class Random_Leaky_Topk_SAE(Leaky_Topk_SAE):
+    '''
+    Currently supports poisson and normal distribution for k
+    During training, each forward pass uses a random value of k from the distribution
+    After training, forward uses k_mean for k by default, but you can override this by providing a value for k_eval
+    '''
+    def __init__(self, gpt: GPTforProbing, num_features: int, epsilon: float, k_mean: int, distribution="poisson", k_std=None, decoder_initialization_scale=0.1):
+        assert distribution in ["poisson", "normal"], "Distribution not recognized.  Only supports poisson and normal distributions."
+        if distribution == "normal":
+            assert k_std, "Need to input a standard deviation to use a normal distribution."
+        super().__init__(gpt, num_features, epsilon, k_mean, decoder_initialization_scale)
+        self.k_mean = k_mean
+        self.distribution = distribution
+        self.k_std = k_std
+        self.rng = np.random.default_rng()
+
+    def forward(self, residual_stream, compute_loss=False, k_eval=None):
+        if self.training:
+            if self.distribution == "poisson":
+                self.k = self.rng.poisson(self.k_mean)
+            elif self.distribution == "normal":
+                self.k = round(self.rng.normal(self.k_mean, self.k_std))
+                if self.k < 1:
+                    self.k = 1
+                elif self.k > self.num_features:
+                    self.k = self.num_features
+        elif k_eval:
+            self.k = k_eval
+        return super().forward(residual_stream, compute_loss)
+    
+    def eval(self):
+        self.k = self.k_mean
+        return super().eval()
     
 class Dimension_Reduction_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, start_index: int, start_proportion: float, end_proportion: float, epsilon: float):
