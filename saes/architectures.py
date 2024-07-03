@@ -8,22 +8,6 @@ from sae_template import SAETemplate
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
-class SAEPretrainedProbes(SAETemplate):
-    def __init__(self, gpt: GPTforProbing, probe_layer: int):
-        super().__init__(gpt)
-        self.gpt.to(device)
-
-        residual_stream_size=gpt.pos_emb.shape[-1]
-        probe = BatteryProbeClassification(device, probe_class=3, num_task=64, input_dim=residual_stream_size)
-        probe_path = f"EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/linearProbe_Map_New_8L8H_GPT_Layer{probe_layer}.ckpt"
-        probe.load_state_dict(torch.load(probe_path, map_location=device))
-        self.probe = probe.to(device)
-
-    def forward(self, residual_stream, compute_loss=False):
-        logits = self.probe.proj(residual_stream)
-        loss = None
-        return loss, residual_stream, logits, residual_stream
-
 class SAEAnthropic(SAETemplate):
 
     def __init__(self, gpt:GPTforProbing, num_features:int, sparsity_coefficient:float, decoder_initialization_scale=0.1):
