@@ -67,8 +67,8 @@ class Gated_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, no_aux_loss=False, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
         self.b_gate = self.encoder_bias #just renaming to make this more clear
-        self.r_mag = torch.nn.Parameter(torch.randn(num_features,))
-        self.b_mag = torch.nn.Parameter(torch.randn(num_features,))
+        self.r_mag = torch.nn.Parameter(torch.zeros((num_features)))
+        self.b_mag = torch.nn.Parameter(torch.zeros((num_features)))
         self.no_aux_loss = no_aux_loss
 
     def forward(self, residual_stream, compute_loss=False):
