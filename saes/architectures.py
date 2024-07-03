@@ -60,7 +60,7 @@ class SAEDummy(SAETemplate):
     def forward(self, residual_stream, compute_loss=False):
         return None, residual_stream,residual_stream,residual_stream
 
-#supported variants: mag_in_aux_loss, relu_only
+#setting no_aux_loss=True implements a gated sae in a different way from the paper that makes more sense to me
 class Gated_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, no_aux_loss=False, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
@@ -211,6 +211,25 @@ class Leaky_Topk_SAE(SAETemplate):
     def report_model_specific_features(self):
         return [f"k (sparsity): {self.k}", f"Epsilon (leakyness): {self.epsilon}"]
 
+class K_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
+    def __init__(self, gpt: GPTforProbing, num_features: int, epsilon: float, k_start: int, anneal_start: int, k_end: int, decoder_initialization_scale=0.1):
+        super().__init__(gpt, num_features, epsilon, k_start, decoder_initialization_scale)
+        self.k_start = k_start
+        self.anneal_start = anneal_start
+        self.k_end = k_end
+        self.k_continuous = k_start
+
+    def training_prep(self, train_dataset=None, eval_dataset=None, batch_size=None, num_epochs=None):
+        num_steps = len(train_dataset) * num_epochs / batch_size
+        self.k_step = (1 - self.k_end)/(num_steps - self.anneal_start)
+        return
+    
+    def after_step_update(self, hidden_layer=None, step=None):
+        if step >= self.anneal_start:
+            self.k_continuous += self.k_step
+            self.k = round(self.k_continuous)
+        return
+    
 class Dimension_Reduction_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, start_index: int, start_proportion: float, end_proportion: float, epsilon: float):
         super().__init__(gpt, num_features)
