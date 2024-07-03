@@ -254,6 +254,8 @@ class SAETemplate(torch.nn.Module, ABC):
         standardized_mean_distances=torch.zeros((hidden_layers.shape[1], board_states.shape[1], 3))
         for i, feature_activation in tqdm(enumerate(hidden_layers.transpose(0,1))):
             feature_stdev=feature_activation.std()
+            if feature_stdev<1e-10:
+                continue
             for j, board_position in enumerate(board_states.transpose(0,1)):
                 for k, piece_class in enumerate([0,1,2]):
                     if j in [27,28,35,36] and k==1:
