@@ -265,7 +265,52 @@ class Random_Leaky_Topk_SAE(Leaky_Topk_SAE):
     def eval(self):
         self.k = self.k_mean
         return super().eval()
+
+class Top_L1_Proportion_SAE(SAETemplate):
+    def __init__(self, gpt: GPTforProbing, num_features: int, L1_proportion_to_remove: float, decoder_initialization_scale=0.1):
+        super().__init__(gpt, num_features)
+        self.proportion = L1_proportion_to_remove
+        residual_stream_size=gpt.pos_emb.shape[-1]
+        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
+        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
+        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
+        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
+        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
+        self.decoder=torch.nn.Parameter(decoder_initial_value)
+        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
+        self.lower_triangle_ones = torch.Tensor([[1 if i >= j else 0 for j in range(num_features)] for i in range(num_features)]).to(device)
+
+    def forward(self, residual_stream, compute_loss=False):
+        '''
+        takes the trimmed residual stream of a language model (as produced by run_gpt_and_trim) and runs the SAE
+        must return a tuple (loss, residual_stream, hidden_layer, reconstructed_residual_stream)
+        residual_stream is shape (B, W, D), where B is batch size, W is (trimmed) window length, and D is the dimension of the model:
+            - residual_stream is unchanged, of size (B, W, D)
+            - hidden_layer is of shape (B, W, D') where D' is the size of the hidden layer
+            - reconstructed_residual_stream is shape (B, W, D) 
+        '''
+        hidden_layer=self.activation_function(residual_stream @ self.encoder + self.encoder_bias)
+        reconstructed_residual_stream=hidden_layer @ self.decoder + self.decoder_bias
+        loss= self.reconstruction_error(residual_stream, reconstructed_residual_stream) if compute_loss else None
+        return loss, residual_stream, hidden_layer, reconstructed_residual_stream
     
+    def activation_function(self, encoder_output):
+        activations = F.relu(encoder_output)
+        sorted, indices = torch.sort(activations)
+        sum_bounds = self.proportion*torch.sum(activations, dim=-1)
+        partial_sums = torch.einsum("ij,...j->...i", self.lower_triangle_ones, sorted)
+        selected_mask_out_of_order = partial_sums > sum_bounds.unsqueeze(-1)
+        selected_mask = selected_mask_out_of_order.gather(-1, indices.argsort(-1))
+        final = selected_mask * activations
+
+        #for testing to make sure this is implemented correctly
+        """ bound = torch.max((~selected_mask) * activations, dim=-1).values
+        assert torch.equal(selected_mask, (activations > bound.unsqueeze(-1))) #this might not be true if there are identical activations
+        assert (~(torch.sum(final, dim=-1) >= (1-self.proportion)*torch.sum(activations, dim=-1))).sum() == 0
+        assert (~(torch.sum((~selected_mask) * activations, dim=-1) <= self.proportion*torch.sum(activations, dim=-1))).sum() == 0
+ """
+        return final
+
 class Dimension_Reduction_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, start_index: int, start_proportion: float, end_proportion: float, epsilon: float):
         super().__init__(gpt, num_features)
