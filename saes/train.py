@@ -12,7 +12,9 @@ class TrainingParams:
         self.num_test_data=num_test_data
         self.report_every_n_data=report_every_n_data
 
-def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingParams, print_results=True):
+default_train_params=TrainingParams()
+
+def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingParams=default_train_params, print_results=True):
     '''
     Does a single standardized experiment where you train and evaluate the given sae
     Inputs:
