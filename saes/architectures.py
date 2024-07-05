@@ -192,7 +192,7 @@ class Leaky_Topk_SAE(SAETemplate):
     def activation_function(self, encoder_output):
         activations = F.relu(encoder_output)
         kth_value = torch.topk(activations, k=self.k).values.min(dim=-1).values
-        return suppress_lower_activations(activations, kth_value, epsilon=self.epsilon)
+        return suppress_lower_activations(activations, kth_value, epsilon=self.epsilon, mode='relative')
     
     def forward(self, residual_stream, compute_loss=False):
         '''
