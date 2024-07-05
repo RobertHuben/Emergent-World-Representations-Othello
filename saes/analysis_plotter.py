@@ -2,9 +2,11 @@ import torch
 import os
 import math
 import numpy as np
+import seaborn as sns
 from matplotlib import pyplot as plt
 
 from utils import load_datasets_automatic
+from board_states import get_board_states
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -70,4 +72,57 @@ def plot_accuracies(sae_location, save_location=None):
         plt.savefig(save_location)
     else:
         plt.show()
+
+def tricolor_plot(sae):
+    x=sae.classifier_smds.max(dim=0).values.reshape((8,8,3))
+    x=torch.clamp(x, min=0, max=2)/2
+    plt.imshow(x)
+    plt.title("All classification accuracies (white is SMD=2)\nRed=Enemy, Blue=Empty, Green=Own")
+    return
+
+def plot_feature_activations(sae, feature_number, board_position, dataset, separate_at_0=True):
+    residual_streams, hidden_layers, reconstructed_residual_streams=sae.catenate_outputs_on_dataset(dataset, batch_size=8, include_loss=False)
+    scores=hidden_layers[:,:, feature_number].flatten().detach().numpy()
+    board_states= get_board_states(dataset)
+    board_states=sae.trim_to_window(board_states)
+    labels=board_states[:,:, board_position].flatten()
+    class_names=["enemy", "empty", "own"]
+    empty_own_enemy_scores=[scores[np.where(labels==class_number)] for class_number in range(3)]
+
+    if separate_at_0:
+        fig, axs = plt.subplots(1,2, gridspec_kw={'width_ratios': [1, 20]})
+        ax=axs[1]
+        axs[0].set_xticks([0],[0])
+        for spine in axs[0].spines.values():
+            spine.set_visible(False)
+        empty_own_enemy_zero_scores=[class_scores[np.where(class_scores==0)] for class_scores in empty_own_enemy_scores]
+        empty_own_enemy_zero_frequencies=[len(class_scores)/len(scores) for class_scores in empty_own_enemy_zero_scores]
+        empty_own_enemy_nonzero_scores=[class_scores[np.where(class_scores!=0)] for class_scores in empty_own_enemy_scores]
+        bottom=0
+        axs[0].set_ylabel("Frequency")
+        ax.set_ylabel(" ")
+
+        for class_number, class_name in enumerate(class_names):
+            sns.kdeplot(empty_own_enemy_nonzero_scores[class_number], fill=True, label=class_name, ax=axs[1])
+            axs[0].bar(x=0, bottom=bottom, height=empty_own_enemy_zero_frequencies[class_number])
+            bottom+=empty_own_enemy_zero_frequencies[class_number]
+    else:
+        fig, ax=plt.subplots()
+        ax.set_ylabel("Frequency")
+        sns.kdeplot(empty_own_enemy_scores, fill=True, label=["enemy", "empty", "own"])
+
+    ax.set_xlabel("Feature Activation")
+    plt.title(f'Feature {feature_number} activations against Position {board_position} contents')
+    plt.legend()
+    save_file_name=f"analysis_results/hist_contents_feat_{feature_number}_pos_{board_position}.png"
+    fig.savefig(save_file_name)
+
+def show_best_feature(sae, position_index, piece_class):
+    feature_to_use=sae.classifier_smds.max(dim=0).indices[position_index][piece_class]
+    _, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
+    plot_feature_activations(sae, feature_to_use, position_index, test_dataset)
+
+if __name__=="__main__":
+    sae=torch.load("trained_models/top_k_sae_k_is_100.pkl", map_location=device)
+    show_best_feature(sae, position_index=9, piece_class=2)
 

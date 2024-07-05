@@ -2,7 +2,7 @@ import torch
 from sae_template import SAETemplate
 from utils import load_datasets_automatic
 from datetime import datetime
-
+import os
 
 class TrainingParams:
 
@@ -12,7 +12,9 @@ class TrainingParams:
         self.num_test_data=num_test_data
         self.report_every_n_data=report_every_n_data
 
-def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingParams, print_results=True):
+default_train_params=TrainingParams()
+
+def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingParams=default_train_params, save_dir="trained_models", print_results=True):
     '''
     Does a single standardized experiment where you train and evaluate the given sae
     Inputs:
@@ -33,9 +35,11 @@ def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingPara
     if print_results:
         print(this_message)
     date_prefix=datetime.today().strftime("%m_%d")
-    with open(f"{date_prefix}_{save_name}.txt", 'w') as f:
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+    with open(f"{save_dir}/{date_prefix}_{save_name}.txt", 'w') as f:
         print(this_message, file=f)
-    torch.save(sae, f"{date_prefix}_{save_name}.pkl")
+    torch.save(sae, f"{save_dir}/{date_prefix}_{save_name}.pkl")
     return sae
 
 

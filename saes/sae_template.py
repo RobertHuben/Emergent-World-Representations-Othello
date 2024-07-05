@@ -129,7 +129,7 @@ class SAETemplate(torch.nn.Module, ABC):
 
         for epoch in range(num_epochs):
             train_dataloader=iter(torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True))
-            print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_data*batch_size} games.")
+            print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_data} games.")
             
             for input_batch, label_batch in tqdm(train_dataloader):
                 input_batch=input_batch.to(device)
