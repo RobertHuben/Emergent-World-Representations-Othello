@@ -87,7 +87,7 @@ def plot_feature_activations(sae, feature_number, board_position, dataset, separ
     board_states=sae.trim_to_window(board_states)
     labels=board_states[:,:, board_position].flatten()
     class_names=["enemy", "empty", "own"]
-    empty_own_enemy_scores=[scores[np.where(labels==class_number)] for class_number in range(3)]
+    enemy_empty_own_scores=[scores[np.where(labels==class_number)] for class_number in range(3)]
 
     if separate_at_0:
         fig, axs = plt.subplots(1,2, gridspec_kw={'width_ratios': [1, 20]})
@@ -95,21 +95,21 @@ def plot_feature_activations(sae, feature_number, board_position, dataset, separ
         axs[0].set_xticks([0],[0])
         for spine in axs[0].spines.values():
             spine.set_visible(False)
-        empty_own_enemy_zero_scores=[class_scores[np.where(class_scores==0)] for class_scores in empty_own_enemy_scores]
-        empty_own_enemy_zero_frequencies=[len(class_scores)/len(scores) for class_scores in empty_own_enemy_zero_scores]
-        empty_own_enemy_nonzero_scores=[class_scores[np.where(class_scores!=0)] for class_scores in empty_own_enemy_scores]
+        enemy_empty_own_zero_scores=[class_scores[np.where(class_scores==0)] for class_scores in enemy_empty_own_scores]
+        enemy_empty_own_zero_frequencies=[len(class_scores)/len(scores) for class_scores in enemy_empty_own_zero_scores]
+        enemy_empty_own_nonzero_scores=[class_scores[np.where(class_scores!=0)] for class_scores in enemy_empty_own_scores]
         bottom=0
         axs[0].set_ylabel("Frequency")
         ax.set_ylabel(" ")
 
         for class_number, class_name in enumerate(class_names):
-            sns.kdeplot(empty_own_enemy_nonzero_scores[class_number], fill=True, label=class_name, ax=axs[1])
-            axs[0].bar(x=0, bottom=bottom, height=empty_own_enemy_zero_frequencies[class_number])
-            bottom+=empty_own_enemy_zero_frequencies[class_number]
+            sns.kdeplot(enemy_empty_own_nonzero_scores[class_number], fill=True, label=class_name, ax=axs[1])
+            axs[0].bar(x=0, bottom=bottom, height=enemy_empty_own_zero_frequencies[class_number])
+            bottom+=enemy_empty_own_zero_frequencies[class_number]
     else:
         fig, ax=plt.subplots()
         ax.set_ylabel("Frequency")
-        sns.kdeplot(empty_own_enemy_scores, fill=True, label=["enemy", "empty", "own"])
+        sns.kdeplot(enemy_empty_own_scores, fill=True, label=class_names)
 
     ax.set_xlabel("Feature Activation")
     plt.title(f'Feature {feature_number} activations against Position {board_position} contents')
@@ -124,5 +124,5 @@ def show_best_feature(sae, position_index, piece_class):
 
 if __name__=="__main__":
     sae=torch.load("trained_models/top_k_sae_k_is_100.pkl", map_location=device)
-    show_best_feature(sae, position_index=9, piece_class=2)
+    show_best_feature(sae, position_index=1, piece_class=0)
 
