@@ -63,6 +63,8 @@ class SAEDummy(SAETemplate):
         return None, residual_stream,residual_stream,residual_stream
 
 #setting no_aux_loss=True implements a gated sae in a different way from the paper that makes more sense to me
+#currently uses tied weights only
+#to try: untied weights original version, as well as using sigmoid instead of step function for training to avoid aux_loss
 class Gated_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, no_aux_loss=False, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
@@ -78,7 +80,7 @@ class Gated_SAE(SAEAnthropic):
             encoder = self.encoder
         encoding = residual_stream @ encoder
         if self.no_aux_loss:
-            hidden_layer = (F.relu(encoding + self.b_gate) - self.b_gate) * torch.exp(self.r_mag) + self.b_mag
+            hidden_layer = F.relu(encoding + self.b_gate) * torch.exp(self.r_mag) + self.b_mag #is b_mag really necessary here?
         else:
             hidden_layer_before_gating = encoding * torch.exp(self.r_mag) + self.b_mag
             hidden_layer = ((encoding + self.b_gate) > 0) * hidden_layer_before_gating
