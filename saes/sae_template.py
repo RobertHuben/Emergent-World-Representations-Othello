@@ -129,7 +129,7 @@ class SAETemplate(torch.nn.Module, ABC):
 
         for epoch in range(num_epochs):
             train_dataloader=iter(torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True))
-            print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_data*batch_size} games.")
+            print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_data} games.")
             
             for input_batch, label_batch in tqdm(train_dataloader):
                 input_batch=input_batch.to(device)
@@ -254,6 +254,8 @@ class SAETemplate(torch.nn.Module, ABC):
         standardized_mean_distances=torch.zeros((hidden_layers.shape[1], board_states.shape[1], 3))
         for i, feature_activation in tqdm(enumerate(hidden_layers.transpose(0,1))):
             feature_stdev=feature_activation.std()
+            if feature_stdev<1e-10:
+                continue
             for j, board_position in enumerate(board_states.transpose(0,1)):
                 for k, piece_class in enumerate([0,1,2]):
                     if j in [27,28,35,36] and k==1:
