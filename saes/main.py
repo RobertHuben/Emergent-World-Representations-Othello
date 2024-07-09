@@ -31,19 +31,20 @@ def evaluate_pretrained_probes(save_dir=None):
         layer_dir = f"{save_dir}/layer_{layer}"
         plot_smd_auroc_distributions(probes[layer], save_dir=layer_dir)
 
-def leaky_topk_training_sweep(k_list:list, epsilon_list:list, num_features_list=[1024], layer=3):
+def leaky_topk_training_sweep(k_list:list, epsilon_list:list, mode_list:list, num_features_list=[1024], layer=3):
     gpt = load_pre_trained_gpt(probe_layer=layer)
     for k in k_list:
         for epsilon in epsilon_list:
             for num_features in num_features_list:
-                sae = Leaky_Topk_SAE(gpt, num_features, epsilon, k)
-                if num_features_list == [1024]:
-                    suffix=""
-                else:
-                    suffix=f"_features={num_features}"
-                sae_name = f"leaky_topk_k={k}_epsilon={epsilon}{suffix}"
-                print(f"\nBeginning training of {sae_name}.")
-                train_and_test_sae(sae, sae_name)
+                for mode in mode_list:
+                    sae = Leaky_Topk_SAE(gpt, num_features, epsilon, k, suppression_mode=mode)
+                    if num_features_list == [1024]:
+                        suffix=""
+                    else:
+                        suffix=f"_features={num_features}"
+                    sae_name = f"leaky_topk_k={k}_epsilon={epsilon}_{mode}{suffix}"
+                    print(f"\nBeginning training of {sae_name}.")
+                    train_and_test_sae(sae, sae_name)
 
 def gated_training_sweep(sparsity_coeff_list:list, type_list:list, num_features_list=[1024], layer=3):
     gpt = load_pre_trained_gpt(probe_layer=layer)
@@ -67,5 +68,5 @@ if __name__=="__main__":
 
     #training_dataset_sweep()
     #evaluate_pretrained_probes(save_dir="probe_evals")
-    #leaky_topk_training_sweep(k_list=[25, 40, 55, 70, 85, 100], epsilon_list=[0.01, 0.05, 0.1, 0.5])
-    gated_training_sweep([0.5, 0.75, 1, 1.5, 2, 2.5], ["standard", "tied_weights_no_aux_loss"])
+    leaky_topk_training_sweep(k_list=[65, 70, 75, 80, 85, 90, 95, 100, 105, 110], epsilon_list=[0.005, 0.01, 0.05, 0.1, 0], mode_list=["relative", "absolute"])
+    #gated_training_sweep([0.5, 0.75, 1, 1.5, 2, 2.5], ["standard", "tied_weights_no_aux_loss"])

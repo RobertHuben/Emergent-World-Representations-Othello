@@ -178,12 +178,14 @@ class Without_TopK_SAE(SAEAnthropic):
 #         super().__init__(gpt, num_features, 0.0, window_start_trim, window_end_trim)
 #     def sparsity_loss_function(self, hidden_layer):
 #         return 0.0
-    
+
+#suppression_mode can be "relative" or "absolute"
 class Leaky_Topk_SAE(SAETemplate):
-    def __init__(self, gpt: GPTforProbing, num_features: int, epsilon: float, k:int, decoder_initialization_scale=0.1):
+    def __init__(self, gpt: GPTforProbing, num_features: int, epsilon: float, k:int, suppression_mode="relative", decoder_initialization_scale=0.1):
         super().__init__(gpt=gpt, num_features=num_features)
         self.epsilon = epsilon
         self.k=k
+        self.suppression_mode = suppression_mode
         residual_stream_size=gpt.pos_emb.shape[-1]
         decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
         decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
@@ -196,7 +198,7 @@ class Leaky_Topk_SAE(SAETemplate):
     def activation_function(self, encoder_output):
         activations = F.relu(encoder_output)
         kth_value = torch.topk(activations, k=self.k).values.min(dim=-1).values
-        return suppress_lower_activations(activations, kth_value, epsilon=self.epsilon, mode='relative')
+        return suppress_lower_activations(activations, kth_value, epsilon=self.epsilon, mode=self.suppression_mode)
     
     def forward(self, residual_stream, compute_loss=False):
         '''
@@ -207,7 +209,7 @@ class Leaky_Topk_SAE(SAETemplate):
             - hidden_layer is of shape (B, W, D') where D' is the size of the hidden layer
             - reconstructed_residual_stream is shape (B, W, D) 
         '''
-        hidden_layer=self.activation_function(residual_stream @ self.encoder + self.encoder_bias)
+        hidden_layer=self.activation_function((residual_stream - self.decoder_bias) @ self.encoder + self.encoder_bias)
         reconstructed_residual_stream=hidden_layer @ self.decoder + self.decoder_bias
         loss= self.reconstruction_error(residual_stream, reconstructed_residual_stream) if compute_loss else None
         return loss, residual_stream, hidden_layer, reconstructed_residual_stream
