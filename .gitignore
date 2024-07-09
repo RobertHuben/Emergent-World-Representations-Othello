@@ -5,3 +5,4 @@ probe_evals/*
 *.pyc
 .gitignore
 test.py
+trained_models/*
