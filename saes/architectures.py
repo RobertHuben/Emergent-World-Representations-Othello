@@ -158,6 +158,9 @@ class Smoothed_L0_SAE(SAEAnthropic):
         transitions = [{"x":self.epsilon, "epsilon":self.epsilon, "delta":self.delta, "focus":"left"}]
         return torch.mean(smoothed_piecewise(normalized_hidden_layer, functions, transitions))
     
+    def report_model_specific_eval_results(self, hidden_layers=None):
+        [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
+    
 class Without_TopK_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int):
         super().__init__(gpt, num_features, sparsity_coefficient)
@@ -234,6 +237,9 @@ class K_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
             self.k = round(self.k_continuous)
         return
     
+    def report_model_specific_eval_results(self, hidden_layers=None):
+        [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
+    
 class Random_Leaky_Topk_SAE(Leaky_Topk_SAE):
     '''
     Currently supports poisson and normal distribution for k
@@ -267,6 +273,9 @@ class Random_Leaky_Topk_SAE(Leaky_Topk_SAE):
     def eval(self):
         self.k = self.k_mean
         return super().eval()
+    
+    def report_model_specific_eval_results(self, hidden_layers=None):
+        [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
 
 class Top_L1_Proportion_SAE(SAETemplate):
     def __init__(self, gpt: GPTforProbing, num_features: int, L1_proportion_to_remove: float, decoder_initialization_scale=0.1):
@@ -324,6 +333,9 @@ class Dimension_Reduction_SAE(SAEAnthropic):
 
     def activation_function(self, encoder_output):
         return self.activation_f(encoder_output)
+    
+    def report_model_specific_eval_results(self, hidden_layers=None):
+        [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
     
 class CallableConstant(object):
     def __init__(self, constant): self.constant = constant
