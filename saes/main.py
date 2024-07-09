@@ -6,7 +6,7 @@ import torch
 from tqdm import tqdm
 
 from saes.sae_template import SAEPretrainedProbes
-from saes.architectures import SAEAnthropic, Leaky_Topk_SAE
+from saes.architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae
@@ -45,9 +45,27 @@ def leaky_topk_training_sweep(k_list:list, epsilon_list:list, num_features_list=
                 print(f"\nBeginning training of {sae_name}.")
                 train_and_test_sae(sae, sae_name)
 
+def gated_training_sweep(sparsity_coeff_list:list, type_list:list, num_features_list=[1024], layer=3):
+    gpt = load_pre_trained_gpt(probe_layer=layer)
+    for coeff in sparsity_coeff_list:
+        for type in type_list:
+            for num_features in num_features_list:
+                if type == "standard":
+                    no_aux_loss = False
+                elif type == "tied_weights_no_aux_loss":
+                    no_aux_loss = True
+                sae = Gated_SAE(gpt, num_features, coeff, no_aux_loss=no_aux_loss)
+                if num_features_list == [1024]:
+                    suffix=""
+                else:
+                    suffix=f"_features={num_features}"
+                sae_name = f"gated_{type}_coeff={coeff}{suffix}"
+                print(f"\nBeginning training of {sae_name}.")
+                train_and_test_sae(sae, sae_name)
 
 if __name__=="__main__":
 
     #training_dataset_sweep()
     #evaluate_pretrained_probes(save_dir="probe_evals")
-    leaky_topk_training_sweep(k_list=[25, 40, 55, 70, 85, 100], epsilon_list=[0.01, 0.05, 0.1, 0.5])
+    #leaky_topk_training_sweep(k_list=[25, 40, 55, 70, 85, 100], epsilon_list=[0.01, 0.05, 0.1, 0.5])
+    gated_training_sweep([0.04, 0.06, 0.08, 0.1, 0.12, 0.14, 0.2, 0.3], ["standard", "tied_weights_no_aux_loss"])
