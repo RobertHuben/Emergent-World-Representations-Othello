@@ -68,4 +68,4 @@ if __name__=="__main__":
     #training_dataset_sweep()
     #evaluate_pretrained_probes(save_dir="probe_evals")
     #leaky_topk_training_sweep(k_list=[25, 40, 55, 70, 85, 100], epsilon_list=[0.01, 0.05, 0.1, 0.5])
-    gated_training_sweep([0.04, 0.06, 0.08, 0.1, 0.12, 0.14, 0.2, 0.3], ["standard", "tied_weights_no_aux_loss"])
+    gated_training_sweep([0.5, 0.75, 1, 1.5, 2, 2.5], ["standard", "tied_weights_no_aux_loss"])
