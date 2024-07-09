@@ -5,9 +5,11 @@ sys.path.append(os.path.join( os.path.dirname ( __file__), os.path.pardir))
 import torch 
 from tqdm import tqdm
 
-from saes.architectures import SAEAnthropic, SAEPretrainedProbes
+from saes.sae_template import SAEPretrainedProbes
+from saes.architectures import SAEAnthropic, Leaky_Topk_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
+from train import train_and_test_sae
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -28,9 +30,24 @@ def evaluate_pretrained_probes(save_dir=None):
     for layer in range(1, 8+1):
         layer_dir = f"{save_dir}/layer_{layer}"
         plot_smd_auroc_distributions(probes[layer], save_dir=layer_dir)
-        
+
+def leaky_topk_training_sweep(k_list:list, epsilon_list:list, num_features_list=[1024], layer=3):
+    gpt = load_pre_trained_gpt(probe_layer=layer)
+    for k in k_list:
+        for epsilon in epsilon_list:
+            for num_features in num_features_list:
+                sae = Leaky_Topk_SAE(gpt, num_features, epsilon, k)
+                if num_features_list == [1024]:
+                    suffix=""
+                else:
+                    suffix=f"_features={num_features}"
+                sae_name = f"leaky_topk_k={k}_epsilon={epsilon}{suffix}"
+                print(f"\nBeginning training of {sae_name}.")
+                train_and_test_sae(sae, sae_name)
+
 
 if __name__=="__main__":
 
     #training_dataset_sweep()
-    evaluate_pretrained_probes(save_dir="probe_evals")
+    #evaluate_pretrained_probes(save_dir="probe_evals")
+    leaky_topk_training_sweep(k_list=[25, 40, 55, 70, 85, 100], epsilon_list=[0.01, 0.05, 0.1, 0.5])
