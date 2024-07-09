@@ -74,11 +74,8 @@ class Gated_SAE(SAEAnthropic):
         self.no_aux_loss = no_aux_loss
 
     def forward(self, residual_stream, compute_loss=False):
-        if self.no_aux_loss:
-            encoder = F.normalize(self.encoder, p=2, dim=1)
-        else:
-            encoder = self.encoder
-        encoding = residual_stream @ encoder
+        normalized_encoder = F.normalize(self.encoder, p=2, dim=1)
+        encoding = (residual_stream - self.decoder_bias) @ normalized_encoder
         if self.no_aux_loss:
             hidden_layer = F.relu(encoding + self.b_gate) * torch.exp(self.r_mag) + self.b_mag #is b_mag really necessary here?
         else:
