@@ -4,6 +4,7 @@ import math
 import numpy as np
 import seaborn as sns
 from matplotlib import pyplot as plt
+import diptest
 
 from utils import load_datasets_automatic
 from board_states import get_board_states
@@ -122,7 +123,20 @@ def show_best_feature(sae, position_index, piece_class):
     _, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
     plot_feature_activations(sae, feature_to_use, position_index, test_dataset)
 
-if __name__=="__main__":
-    sae=torch.load("trained_models/top_k_sae_k_is_100.pkl", map_location=device)
-    show_best_feature(sae, position_index=1, piece_class=0)
+def compute_feature_dip_scores(sae):
+    '''
+    given an sae, computes the dip scores for all features
+    dip scores measure bimodality. A score >0.01 is somewhat bimodal, and >0.02 is "clearly" bimodal
+    '''
+    train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
+    residual_streams, hidden_layers, reconstructed_residual_streams=sae.catenate_outputs_on_dataset(test_dataset, batch_size=8, include_loss=False)
+    hidden_layers=hidden_layers.transpose(0,2).flatten(start_dim=1)
+    dip_scores=[]
+    for feature_scores in hidden_layers:
+        dip = diptest.dipstat(feature_scores.detach().numpy())
+        dip_scores.append(dip)
+    return torch.tensor(dip_scores)
 
+
+if __name__=="__main__":
+    pass
