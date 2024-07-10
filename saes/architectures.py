@@ -209,8 +209,10 @@ class Leaky_Topk_SAE(SAETemplate):
             - hidden_layer is of shape (B, W, D') where D' is the size of the hidden layer
             - reconstructed_residual_stream is shape (B, W, D) 
         '''
-        hidden_layer=self.activation_function((residual_stream - self.decoder_bias) @ self.encoder + self.encoder_bias)
-        reconstructed_residual_stream=hidden_layer @ self.decoder + self.decoder_bias
+        normalized_encoder = F.normalize(self.encoder, p=2, dim=1) #normalize columns
+        normalized_decoder = F.normalize(self.decoder, p=2, dim=1) #normalize columns
+        hidden_layer=self.activation_function((residual_stream - self.decoder_bias) @ normalized_encoder + self.encoder_bias)
+        reconstructed_residual_stream=hidden_layer @ normalized_decoder + self.decoder_bias
         loss= self.reconstruction_error(residual_stream, reconstructed_residual_stream) if compute_loss else None
         return loss, residual_stream, hidden_layer, reconstructed_residual_stream
 
@@ -332,6 +334,8 @@ class Dimension_Reduction_SAE(SAEAnthropic):
 
     def activation_function(self, encoder_output):
         return self.activation_f(encoder_output)
+    
+    #need to override loss function of SAEAnthropic, or else inherit from SAETemplate
     
     def report_model_specific_eval_results(self, hidden_layers=None):
         [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
