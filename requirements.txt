@@ -5,3 +5,4 @@ scipy
 circuitsvis
 seaborn
 torcheval
+diptest
