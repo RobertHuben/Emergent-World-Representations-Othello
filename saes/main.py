@@ -68,5 +68,5 @@ if __name__=="__main__":
 
     #training_dataset_sweep()
     #evaluate_pretrained_probes(save_dir="probe_evals")
-    leaky_topk_training_sweep(k_list=[65, 70, 75, 80, 85, 90, 95, 100, 105, 110], epsilon_list=[0.005, 0.01, 0.05, 0.1, 0], mode_list=["relative", "absolute"])
+    leaky_topk_training_sweep(k_list=[65, 70, 75, 80, 85, 90, 95, 100, 105, 110], epsilon_list=[0.005, 0.01, 0.05, 0.1, 0], mode_list=["absolute", "relative"])
     #gated_training_sweep([0.5, 0.75, 1, 1.5, 2, 2.5], ["standard", "tied_weights_no_aux_loss"])
