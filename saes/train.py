@@ -13,6 +13,7 @@ class TrainingParams:
         self.report_every_n_data=report_every_n_data
 
 default_train_params=TrainingParams()
+test_train_params=TrainingParams(num_test_data=100, report_every_n_data=500)
 
 def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingParams=default_train_params, save_dir="trained_models", print_results=True):
     '''

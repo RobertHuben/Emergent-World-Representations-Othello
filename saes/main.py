@@ -9,7 +9,7 @@ from saes.sae_template import SAEPretrainedProbes
 from saes.architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
-from train import train_and_test_sae
+from train import train_and_test_sae, test_train_params
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -44,7 +44,7 @@ def leaky_topk_training_sweep(k_list:list, epsilon_list:list, mode_list:list, nu
                         suffix=f"_features={num_features}"
                     sae_name = f"leaky_topk_k={k}_epsilon={epsilon}_{mode}{suffix}"
                     print(f"\nBeginning training of {sae_name}.")
-                    train_and_test_sae(sae, sae_name)
+                    train_and_test_sae(sae, sae_name, test_train_params)
 
 def gated_training_sweep(sparsity_coeff_list:list, type_list:list, num_features_list=[1024], layer=3):
     gpt = load_pre_trained_gpt(probe_layer=layer)
