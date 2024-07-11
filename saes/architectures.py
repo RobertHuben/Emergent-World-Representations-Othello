@@ -425,7 +425,8 @@ def suppress_lower_activations(t, bound, epsilon, inclusive=True, mode="absolute
     above_only = t * above_mask
     below_only = t * (~above_mask)
     if mode == "absolute":
-        return above_only + epsilon/bound * below_only
+        bad_bound_mask = bound <= 0 #to make sure we don't divide by 0
+        return above_only + (~bad_bound_mask)*epsilon/(bound+bad_bound_mask) * below_only
     elif mode == "relative":
         return above_only + epsilon * below_only
 
