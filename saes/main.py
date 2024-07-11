@@ -44,7 +44,7 @@ def leaky_topk_training_sweep(k_list:list, epsilon_list:list, mode_list:list, nu
                         suffix=f"_features={num_features}"
                     sae_name = f"leaky_topk_k={k}_epsilon={epsilon}_{mode}{suffix}"
                     print(f"\nBeginning training of {sae_name}.")
-                    train_and_test_sae(sae, sae_name, test_train_params)
+                    train_and_test_sae(sae, sae_name)
 
 def gated_training_sweep(sparsity_coeff_list:list, type_list:list, num_features_list=[1024], layer=3):
     gpt = load_pre_trained_gpt(probe_layer=layer)
@@ -68,5 +68,5 @@ if __name__=="__main__":
 
     #training_dataset_sweep()
     #evaluate_pretrained_probes(save_dir="probe_evals")
-    leaky_topk_training_sweep(k_list=[65, 70, 75, 80, 85, 90, 95, 100, 105, 110], epsilon_list=[0.005, 0.01, 0.05, 0.1, 0], mode_list=["absolute", "relative"])
+    leaky_topk_training_sweep(k_list=[65, 70, 75, 80, 85, 90, 95, 100, 105, 110], epsilon_list=[0.005, 0.01, 0.05, 0.1, 0], mode_list=["absolute"])
     #gated_training_sweep([0.5, 0.75, 1, 1.5, 2, 2.5], ["standard", "tied_weights_no_aux_loss"])
