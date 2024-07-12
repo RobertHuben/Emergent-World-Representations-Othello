@@ -62,6 +62,46 @@ class SAEDummy(SAETemplate):
     def forward(self, residual_stream, compute_loss=False):
         return None, residual_stream,residual_stream,residual_stream
 
+class MultiHeadedTopKSAE(SAETemplate):
+
+    def __init__(self, gpt:GPTforProbing, num_features:int, sparsity:int, num_heads:int, decoder_initialization_scale=0.1):
+        super().__init__(gpt=gpt, num_features=num_features)
+        self.sparsity=sparsity
+        self.num_heads=num_heads
+        residual_stream_size=gpt.pos_emb.shape[-1]
+        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
+        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
+        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
+        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
+        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
+        self.decoder=torch.nn.Parameter(decoder_initial_value)
+        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
+
+    def activation_function(self, encoder_output):
+        activations = F.relu(encoder_output)
+        attention_by_head=activations.reshape((activations.shape[0],activations.shape[1], self.num_heads, self.num_features//self.num_heads))
+        kth_value = torch.topk(attention_by_head, k=self.sparsity//self.num_heads).values.min(dim=-1).values
+        masked_activations=suppress_lower_activations(attention_by_head, kth_value, epsilon=0, mode='relative')
+        return masked_activations.reshape(activations.shape)
+    
+    def forward(self, residual_stream, compute_loss=False):
+        '''
+        takes the trimmed residual stream of a language model (as produced by run_gpt_and_trim) and runs the SAE
+        must return a tuple (loss, residual_stream, hidden_layer, reconstructed_residual_stream)
+        residual_stream is shape (B, W, D), where B is batch size, W is (trimmed) window length, and D is the dimension of the model:
+            - residual_stream is unchanged, of size (B, W, D)
+            - hidden_layer is of shape (B, W, D') where D' is the size of the hidden layer
+            - reconstructed_residual_stream is shape (B, W, D) 
+        '''
+        hidden_layer=self.activation_function(residual_stream @ self.encoder + self.encoder_bias)
+        reconstructed_residual_stream=hidden_layer @ self.decoder + self.decoder_bias
+        loss= self.reconstruction_error(residual_stream, reconstructed_residual_stream) if compute_loss else None
+        return loss, residual_stream, hidden_layer, reconstructed_residual_stream
+
+    def report_model_specific_features(self):
+        return [f"Number of heads: {self.num_heads}", f"Sparsity (total): {self.sparsity}"]
+
+#supported variants: mag_in_aux_loss, relu_only
 #setting no_aux_loss=True implements a gated sae in a different way from the paper that makes more sense to me
 class Gated_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, no_aux_loss=False, decoder_initialization_scale=0.1):
