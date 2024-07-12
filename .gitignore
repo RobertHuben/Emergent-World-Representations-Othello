@@ -6,3 +6,4 @@ probe_evals/*
 .gitignore
 test.py
 trained_models/*
+analysis_results/*
