@@ -5,6 +5,7 @@ import numpy as np
 import seaborn as sns
 from matplotlib import pyplot as plt
 import diptest
+import re
 
 from utils import load_datasets_automatic
 from board_states import get_board_states
@@ -137,6 +138,48 @@ def compute_feature_dip_scores(sae):
         dip_scores.append(dip)
     return torch.tensor(dip_scores)
 
+def plot_many_saes(prefix, dir="trained_models"):
+    suffix=".txt"
+    smd_expression='Number of SMD>2'
+    sparsity_expression='k (sparsity)'
+    num_features_expression='Number of features'
+
+    names=[]
+    smds=[]
+    sparsities=[]
+    num_features_list=[]
+
+    for file in os.listdir(dir):
+        if not file.startswith(prefix) or not file.endswith(suffix):
+            continue
+        contents=open(f"{dir}/{file}", 'r').read()
+        smd_line=[line for line in contents.split("\n") if line.strip().startswith(smd_expression)]
+        if smd_line:
+            smd=float(smd_line[0].split(": ")[1])
+        sparsity_line=[line for line in contents.split("\n") if line.strip().startswith(sparsity_expression)]
+        if sparsity_line:
+            sparsity=int(sparsity_line[0].split(": ")[1])
+        num_features_line=[line for line in contents.split("\n") if line.strip().startswith(num_features_expression)]
+        if num_features_line:
+            num_features=int(num_features_line[0].split(": ")[1])
+
+        names.append(file)
+        smds.append(smd)
+        sparsities.append(sparsity)
+        num_features_list.append(num_features)
+
+    unique_sparsities=sorted(list(set(sparsities)))
+    unique_num_features=sorted(list(set(num_features_list)))
+    data=np.zeros((len(unique_sparsities), len(unique_num_features)))
+    for smd, sparsity, num_feat in zip(smds, sparsities, num_features_list):
+        data[unique_sparsities.index(sparsity), unique_num_features.index(num_feat)]=smd
+    bar_width=.5/len(unique_sparsities)
+    for i, sparsity in enumerate(unique_sparsities):
+        plt.bar(np.arange(len(unique_num_features))+bar_width*i, data[i], bar_width, label=sparsity)
+    plt.xticks(ticks=range(len(unique_num_features)), labels=unique_num_features)
+    plt.xlabel("Num Features")
+    plt.savefig("Comparison.jpg")
+    return
 
 if __name__=="__main__":
     pass
