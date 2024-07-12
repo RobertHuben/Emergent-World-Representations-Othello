@@ -17,7 +17,7 @@ class SAEAnthropic(SAETemplate):
         self.sparsity_coefficient=sparsity_coefficient
         residual_stream_size=gpt.pos_emb.shape[-1]
         decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
-        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=1) # columns of norm 1
+        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=1).unsqueeze(-1) # columns of norm 1
         decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
         self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
         self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
