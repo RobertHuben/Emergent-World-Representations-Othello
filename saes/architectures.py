@@ -17,7 +17,7 @@ class SAEAnthropic(SAETemplate):
         self.sparsity_coefficient=sparsity_coefficient
         residual_stream_size=gpt.pos_emb.shape[-1]
         decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
-        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
+        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=1) # columns of norm 1
         decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
         self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
         self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
@@ -44,8 +44,8 @@ class SAEAnthropic(SAETemplate):
         return F.relu(encoder_output)
 
     def sparsity_loss_function(self, hidden_layer):
-        decoder_row_norms=self.decoder.norm(dim=1)
-        return torch.mean(hidden_layer*decoder_row_norms)
+        decoder_column_norms=self.decoder.norm(dim=1)
+        return torch.mean(hidden_layer*decoder_column_norms)
     
     def report_model_specific_features(self):
         return [f"Sparsity loss coefficient: {self.sparsity_coefficient}"]
