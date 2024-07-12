@@ -83,3 +83,34 @@ class LinearProbe(torch.nn.Module):
             self.print_evaluation(train_loss=loss, eval_dataset=eval_probe_dataset, step_number="Omega")
         self.eval()
     
+    def catenate_outputs_on_dataset(self, dataset:ProbeDataset, batch_size=8):
+        '''
+        runs the model on the entire dataset, one batch at a time, catenating the outputs
+        '''
+        losses=[]
+        logits_list=[]
+        targets=[]
+        test_dataloader=iter(torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False))
+        for test_input, test_labels in test_dataloader:
+            test_input=test_input.to(device)
+            test_labels = test_labels.to(device)
+            loss, logits = self.forward(test_input, test_labels)
+            losses.append(loss)
+            logits_list.append(logits)
+            targets.append(test_labels)
+        losses=torch.stack(losses)
+        logits=torch.stack(logits_list)
+        targets=torch.stack(targets)
+        return losses, logits, targets
+
+    def compute_accuracy(self, logits, targets):
+        predictions = torch.argmax(logits, dim=-1, keepdim=False)
+        hits = predictions == targets
+        return hits.mean()
+
+    def print_evaluation(self, train_loss, eval_dataset:CharDataset, step_number="N/A"):
+        losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset, include_loss=True)
+        test_loss=losses.mean()
+        accuracy = self.compute_accuracy(logits, targets)
+        print_message=f"Train loss, test loss, accuracy after {self.num_data_trained_on} training games: {train_loss.item():.2f}, {test_loss:.3f}, {accuracy:.4f}"
+        tqdm.write(print_message)
