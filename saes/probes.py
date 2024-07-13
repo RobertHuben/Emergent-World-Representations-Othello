@@ -135,5 +135,5 @@ class SAEforProbing(torch.nn.Module):
         self.output_dim = sae.num_features
 
     def forward(self, input):
-        loss, residual_stream, hidden_layer, reconstructed_residual_stream = self.sae(input)
+        loss, residual_stream, hidden_layer, reconstructed_residual_stream = self.sae.forward_on_tokens(input)
         return hidden_layer
