@@ -44,6 +44,7 @@ class LinearProbe(torch.nn.Module):
         self.linear = torch.nn.Linear(input_dim, 64*3)
         self.num_data_trained_on=0
         self.accuracy = None
+        self.accuracy_by_board_position = None
 
         for param in model_to_probe.parameters():
             param.requires_grad=False
@@ -121,12 +122,14 @@ class LinearProbe(torch.nn.Module):
     def compute_accuracy(self, logits, targets):
         predictions = torch.argmax(logits, dim=-1, keepdim=False)
         hits = predictions == targets
-        return hits.sum()/(targets != -100).sum()
+        self.accuracy_by_board_position = hits.reshape(-1, 64).sum(dim=0) / (targets != -100).reshape(-1,64).sum(dim=0)
+        self.accuracy_by_board_position = self.accuracy_by_board_position.view(8,8)
+        self.accuracy = self.accuracy_by_board_position.mean()
 
     def print_evaluation(self, train_loss, eval_dataset:CharDataset, step_number="N/A"):
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         test_loss=losses.mean()
-        self.accuracy = self.compute_accuracy(logits, targets)
+        self.compute_accuracy(logits, targets)
         print_message=f"Train loss, test loss, accuracy after {self.num_data_trained_on} training games: {train_loss.item():.2f}, {test_loss:.3f}, {self.accuracy:.4f}"
         tqdm.write(print_message)
 

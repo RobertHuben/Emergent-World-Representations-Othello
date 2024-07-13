@@ -11,6 +11,7 @@ from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae, test_train_params, train_probe
 from probes import SAEforProbing
+from train import TrainingParams
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -72,7 +73,9 @@ if __name__=="__main__":
     #leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005], mode_list=["absolute"])
     #gated_training_sweep([60, 100, 120, 150], ["standard"])
 
-    sae = torch.load("trained_models/07_13_test_sae.pkl", map_location=device)
-    #sae = torch.load("trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl", map_location=device)
+    #sae = torch.load("trained_models/07_13_test_sae.pkl", map_location=device)
+    sae = torch.load("trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl", map_location=device)
     sae_to_probe = SAEforProbing(sae)
-    train_probe(sae_to_probe, "test_sae_probe")
+    training_params = TrainingParams(num_train_data=2000000)
+    probe = train_probe(sae_to_probe, "test_sae_probe", train_params=training_params)
+    print(probe.accuracy_by_board_position)
