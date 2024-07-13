@@ -43,6 +43,7 @@ class LinearProbe(torch.nn.Module):
         self.model_to_probe = model_to_probe
         self.linear = torch.nn.Linear(input_dim, 64*3)
         self.num_data_trained_on=0
+        self.accuracy = None
 
         for param in model_to_probe.parameters():
             param.requires_grad=False
@@ -123,8 +124,8 @@ class LinearProbe(torch.nn.Module):
     def print_evaluation(self, train_loss, eval_dataset:CharDataset, step_number="N/A"):
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         test_loss=losses.mean()
-        accuracy = self.compute_accuracy(logits, targets)
-        print_message=f"Train loss, test loss, accuracy after {self.num_data_trained_on} training games: {train_loss.item():.2f}, {test_loss:.3f}, {accuracy:.4f}"
+        self.accuracy = self.compute_accuracy(logits, targets)
+        print_message=f"Train loss, test loss, accuracy after {self.num_data_trained_on} training games: {train_loss.item():.2f}, {test_loss:.3f}, {self.accuracy:.4f}"
         tqdm.write(print_message)
 
 class SAEforProbing(torch.nn.Module):
