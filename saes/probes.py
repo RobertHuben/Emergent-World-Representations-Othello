@@ -115,7 +115,7 @@ class LinearProbe(torch.nn.Module):
             targets_list.append(targets)
         losses=torch.stack(losses)
         logits=torch.stack(logits_list)
-        targets=torch.stack(targets)
+        targets=torch.stack(targets_list)
         return losses, logits, targets
 
     def compute_accuracy(self, logits, targets):
