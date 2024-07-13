@@ -73,7 +73,7 @@ if __name__=="__main__":
     #leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005], mode_list=["absolute"])
     #gated_training_sweep([60, 100, 120, 150], ["standard"])
 
-    probe = LinearProbe(model_to_probe=load_pre_trained_gpt(), input_dim=512)
+    probe = LinearProbe(model_to_probe=load_pre_trained_gpt(probe_layer=6), input_dim=512)
     train_params=TrainingParams()
     train_dataset, test_dataset = load_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
     probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
