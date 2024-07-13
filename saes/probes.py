@@ -9,6 +9,7 @@ from tqdm import tqdm
 from torch.utils.data import Dataset
 from EWOthello.mingpt.dataset import CharDataset
 from EWOthello.data.othello import OthelloBoardState
+from sae_template import SAETemplate
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -125,3 +126,12 @@ class LinearProbe(torch.nn.Module):
         accuracy = self.compute_accuracy(logits, targets)
         print_message=f"Train loss, test loss, accuracy after {self.num_data_trained_on} training games: {train_loss.item():.2f}, {test_loss:.3f}, {accuracy:.4f}"
         tqdm.write(print_message)
+
+class SAEforProbing(torch.nn.Module):
+    def __init__(self, sae:SAETemplate):
+        self.sae = sae
+        self.output_dim = sae.num_features
+
+    def forward(self, input):
+        loss, residual_stream, hidden_layer, reconstructed_residual_stream = self.sae(input)
+        return hidden_layer
