@@ -10,6 +10,8 @@ from saes.architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae, test_train_params
+from train import TrainingParams
+from probes import LinearProbe
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -68,5 +70,10 @@ if __name__=="__main__":
 
     #training_dataset_sweep()
     #evaluate_pretrained_probes(save_dir="probe_evals")
-    leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005], mode_list=["absolute"])
+    #leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005], mode_list=["absolute"])
     #gated_training_sweep([60, 100, 120, 150], ["standard"])
+
+    probe = LinearProbe(model_to_probe=load_pre_trained_gpt(), input_dim=512)
+    train_params=TrainingParams()
+    train_dataset, test_dataset = load_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
+    probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
