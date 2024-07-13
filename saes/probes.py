@@ -29,7 +29,7 @@ class ProbeDataset(Dataset):
         a = OthelloBoardState()
         board_state = a.get_gt(tbf[:valid_until], "get_state")
         board_state = (np.array(board_state) - 1.0) * self.enemy_own_modifier[:valid_until, :] + 1.0
-        board_state = torch.tensor(board_state, dtype=torch.float32)
+        board_state = torch.tensor(board_state, dtype=torch.float32).to(device)
         if valid_until < len(tbf):
             padding = -100*torch.ones(len(tbf)-valid_until, 64).to(device)
             board_state = torch.cat((board_state, padding), 0)
