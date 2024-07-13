@@ -74,5 +74,6 @@ if __name__=="__main__":
 
     gpt = load_pre_trained_gpt()
     sae = Gated_SAE(gpt, 1024, 1.5, no_aux_loss=True)
+    sae = train_and_test_sae(sae, "test_sae")
     sae_to_probe = SAEforProbing(sae)
     train_probe(sae_to_probe, "test_sae_probe")
