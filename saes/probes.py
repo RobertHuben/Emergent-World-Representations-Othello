@@ -130,6 +130,7 @@ class LinearProbe(torch.nn.Module):
 
 class SAEforProbing(torch.nn.Module):
     def __init__(self, sae:SAETemplate):
+        super().__init__()
         self.sae = sae
         self.output_dim = sae.num_features
 
