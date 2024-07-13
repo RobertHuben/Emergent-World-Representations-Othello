@@ -47,7 +47,7 @@ def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingPara
     return sae
 
 def train_probe(model_to_probe:Union[GPTforProbing, SAEforProbing], save_name:str, train_params:TrainingParams=default_train_params, save_dir="trained_probes"):
-    if model_to_probe is SAEforProbing:
+    if isinstance(model_to_probe, SAEforProbing):
         input_dim = model_to_probe.output_dim
     else:
         input_dim = 512

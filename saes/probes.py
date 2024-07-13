@@ -55,7 +55,9 @@ class LinearProbe(torch.nn.Module):
         if targets == None:
             loss = None
         else:
-            loss = F.cross_entropy(logits.view(-1, logits.shape[-1]), targets.view(-1), ignore_index=-100)
+            if isinstance(self.model_to_probe, SAEforProbing):
+                targets = self.model_to_probe.sae.trim_to_window(targets)
+            loss = F.cross_entropy(logits.view(-1, logits.shape[-1]), targets.reshape(-1), ignore_index=-100)
         return loss, logits
     
     def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=1, report_every_n_data=500, learning_rate=1e-3, fixed_seed=1337):
