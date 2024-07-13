@@ -72,6 +72,6 @@ if __name__=="__main__":
     #leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005], mode_list=["absolute"])
     #gated_training_sweep([60, 100, 120, 150], ["standard"])
 
-    sae = torch.load("test_sae", map_location=device)
+    sae = torch.load("trained_models/07_13_test_sae.pkl", map_location=device)
     sae_to_probe = SAEforProbing(sae)
     train_probe(sae_to_probe, "test_sae_probe")
