@@ -58,7 +58,7 @@ class LinearProbe(torch.nn.Module):
             if isinstance(self.model_to_probe, SAEforProbing):
                 targets = self.model_to_probe.sae.trim_to_window(targets)
             loss = F.cross_entropy(logits.view(-1, logits.shape[-1]), targets.reshape(-1), ignore_index=-100)
-        return loss, logits
+        return loss, logits, targets
     
     def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=1, report_every_n_data=500, learning_rate=1e-3, fixed_seed=1337):
         '''
@@ -88,7 +88,7 @@ class LinearProbe(torch.nn.Module):
                 step+=1
                 self.num_data_trained_on+=len(input_batch)
                 optimizer.zero_grad(set_to_none=True)
-                loss, logits = self.forward(input_batch, label_batch)
+                loss, logits, targets = self.forward(input_batch, label_batch)
                 loss.backward()
                 optimizer.step()
 
@@ -104,15 +104,15 @@ class LinearProbe(torch.nn.Module):
         '''
         losses=[]
         logits_list=[]
-        targets=[]
+        targets_list=[]
         test_dataloader=iter(torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False))
         for test_input, test_labels in test_dataloader:
             test_input=test_input.to(device)
             test_labels = test_labels.to(device)
-            loss, logits = self.forward(test_input, test_labels)
+            loss, logits, targets = self.forward(test_input, test_labels)
             losses.append(loss)
             logits_list.append(logits)
-            targets.append(test_labels)
+            targets_list.append(targets)
         losses=torch.stack(losses)
         logits=torch.stack(logits_list)
         targets=torch.stack(targets)
