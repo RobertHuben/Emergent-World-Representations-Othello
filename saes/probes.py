@@ -120,7 +120,7 @@ class LinearProbe(torch.nn.Module):
         return hits.sum()/(targets != -100).sum()
 
     def print_evaluation(self, train_loss, eval_dataset:CharDataset, step_number="N/A"):
-        losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset, include_loss=True)
+        losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         test_loss=losses.mean()
         accuracy = self.compute_accuracy(logits, targets)
         print_message=f"Train loss, test loss, accuracy after {self.num_data_trained_on} training games: {train_loss.item():.2f}, {test_loss:.3f}, {accuracy:.4f}"
