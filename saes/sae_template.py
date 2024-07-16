@@ -140,10 +140,10 @@ class SAETemplate(torch.nn.Module, ABC):
                 loss.backward()
                 optimizer.step()
 
-                self.after_step_update(hidden_layer=hidden_layer, step=step)
-
                 if step % report_on_batch_number==0:
                     self.print_evaluation(loss, eval_dataset, step_number=step)
+
+                self.after_step_update(hidden_layer=hidden_layer, step=step)
         else:
             self.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
         self.eval()
