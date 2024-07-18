@@ -70,7 +70,7 @@ def L1_probe_sweep(sae_location:str, sparsity_coeff_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
+    training_params = TrainingParams(num_train_data=500000)
     for coeff in sparsity_coeff_list:
         probe_name = f"L1_probe___sae={sae_name}___coeff={coeff}"
         probe = L1_Sparse_Probe(sae_to_probe, input_dim=1024, sparsity_coeff=coeff)
@@ -81,7 +81,7 @@ def without_topk_probe_sweep(sae_location:str, params_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
+    training_params = TrainingParams(num_train_data=500000)
     for (k, coeff) in params_list:
         probe_name = f"without_topk_probe___sae={sae_name}___k={k}_coeff={coeff}"
         probe = Without_Topk_Sparse_Probe(sae_to_probe, input_dim=1024, k=k, sparsity_coeff=coeff)
@@ -92,7 +92,7 @@ def leaky_topk_probe_sweep(sae_location:str, params_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
+    training_params = TrainingParams(num_train_data=500000)
     for (k, epsilon) in params_list:
         probe_name = f"leaky_topk_probe___sae={sae_name}___k={k}_eps={epsilon}"
         probe = Leaky_Topk_Probe(sae_to_probe, input_dim=1024, k=k, epsilon=epsilon)
@@ -103,7 +103,7 @@ def k_annealing_probe_sweep(sae_location:str, params_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
+    training_params = TrainingParams(num_train_data=500000)
     for (epsilon, k_start, anneal_start, k_end) in params_list:
         probe_name = f"k_anneal_probe___sae={sae_name}___eps={epsilon}_kstart={k_start}_anneal={anneal_start}_kend={k_end}"
         probe = K_Annealing_Probe(sae_to_probe, input_dim=1024, epsilon=epsilon, k_start=k_start, anneal_start=anneal_start, k_end=k_end)
@@ -136,8 +136,8 @@ if __name__=="__main__":
 
     params_list = []
     for k_start in [1024, 512, 100]:
-        for anneal_start in [0, 100000]:
-            if k_start == 1024 and anneal_start != 0:
+        for anneal_start in [0, 1000]:
+            if (k_start, anneal_start) in [(1024, 0), (1024, 1000), (512, 0)]:
                 continue
             for k_end in [1, 2, 3]:
                 params_list.append((0.005, k_start, anneal_start, k_end))
