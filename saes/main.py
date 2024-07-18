@@ -120,7 +120,7 @@ if __name__=="__main__":
 
     #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
-    params_list = [50, 100, 150]
+    """ params_list = [50, 100, 150]
     L1_probe_sweep(sae_location, params_list)
 
     params_list = []
@@ -132,13 +132,13 @@ if __name__=="__main__":
     params_list = []
     for k in [1, 2, 3]:
         params_list.append((k, 0.005))
-    leaky_topk_probe_sweep(sae_location, params_list)
+    leaky_topk_probe_sweep(sae_location, params_list) """
 
-    """ params_list = []
+    params_list = []
     for k_start in [1024, 512, 100]:
         for anneal_start in [0, 100000]:
             if k_start == 1024 and anneal_start != 0:
                 continue
             for k_end in [1, 2, 3]:
                 params_list.append((0.005, k_start, anneal_start, k_end))
-    k_annealing_probe_sweep(sae_location, params_list) """
+    k_annealing_probe_sweep(sae_location, params_list)
