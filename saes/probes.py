@@ -259,13 +259,13 @@ class K_Annealing_Probe(Leaky_Topk_Probe):
 
     def training_prep(self, train_dataset=None, batch_size=None, num_epochs=None):
         num_steps = len(train_dataset) * num_epochs / batch_size
-        self.k_step = (1 - self.k_end)/(num_steps - self.anneal_start)
+        self.k_step = (self.k_start - self.k_end)/(num_steps - self.anneal_start)
         return
     
     def after_step_update(self, step=None):
         if step >= self.anneal_start:
             if step == self.anneal_start:
                 print("\nStarting annealing now.\n")
-            self.k_continuous += self.k_step
+            self.k_continuous -= self.k_step
             self.k = round(self.k_continuous)
         return
