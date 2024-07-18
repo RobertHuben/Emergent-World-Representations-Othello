@@ -264,6 +264,8 @@ class K_Annealing_Probe(Leaky_Topk_Probe):
     
     def after_step_update(self, step=None):
         if step >= self.anneal_start:
+            if step == self.anneal_start:
+                print("\nStarting annealing now.\n")
             self.k_continuous += self.k_step
             self.k = round(self.k_continuous)
         return
