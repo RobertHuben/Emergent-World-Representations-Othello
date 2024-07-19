@@ -171,10 +171,13 @@ class LinearProbe(torch.nn.Module):
         if not isinstance(eval_dataset, ProbeDataset):
             eval_dataset = ProbeDataset(eval_dataset)
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
-        #test_loss=losses.mean()
         self.compute_accuracy(logits, targets)
-        with open(save_location, "w") as f:
+        abs_weights = torch.abs(self.linear.weight)
+        topk_features = torch.topk(abs_weights, k=4, dim=1).indices
+        with open(save_location, 'a') as f:
+            f.write(f"Average accuracy: {self.accuracy}\n")
             f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
+            f.write(f"\nTop 4 features by board position and class:\n{topk_features.reshape((8, 8, 3, 4))}")
 
 class L1_Sparse_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, input_dim: int, sparsity_coeff: float):
@@ -189,17 +192,6 @@ class L1_Sparse_Probe(LinearProbe):
         loss = accuracy_loss + self.sparsity_coeff * sparsity_loss
         return loss, logits
     
-    def after_training_eval(self, eval_dataset: ProbeDataset, save_location: str):
-        super().after_training_eval(eval_dataset, save_location)
-        abs_weights = torch.abs(self.linear.weight)
-        means = abs_weights.mean(dim=1).unsqueeze(dim=1)
-        stds = abs_weights.std(dim=1).unsqueeze(dim=1)
-        average_weights_over_zscore = []
-        for z in [0, 1, 2, 3]:
-            average_weights_over_zscore.append((abs_weights > means + z*stds).sum(dim=-1).float().mean())
-        with open(save_location, 'a') as f:
-            f.write(f"\nAverage number of weights over 0, 1, 2, and 3 stds above the mean: {average_weights_over_zscore}")
-
 class Without_Topk_Sparse_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, input_dim: int, k: int, sparsity_coeff: float):
         super().__init__(model_to_probe, input_dim)
@@ -218,15 +210,7 @@ class Without_Topk_Sparse_Probe(LinearProbe):
 
         loss = accuracy_loss + self.sparsity_coeff * sparsity_loss
         return loss, logits
-    
-    def after_training_eval(self, eval_dataset: ProbeDataset, save_location: str):
-        super().after_training_eval(eval_dataset, save_location)
-        abs_weights = torch.abs(self.linear.weight)
-        topk_features = torch.topk(abs_weights, k=self.k, dim=1).indices
-        top_weights = torch.topk(abs_weights, k=self.k+3, dim=1).values
-        with open(save_location, 'a') as f:
-            f.write(f"\nTop weights by board position and class:\n{top_weights.reshape((-1, 3, self.k+3))}\n\nTop {self.k} features by board position and class:\n{topk_features.reshape((-1, 3, self.k))}")    
-    
+      
 class Leaky_Topk_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, input_dim: int, k: int, epsilon: float):
         super().__init__(model_to_probe, input_dim)
@@ -240,14 +224,6 @@ class Leaky_Topk_Probe(LinearProbe):
         logits = activations @ suppressed_weights.transpose(0, 1) + self.linear.bias
         loss = super().loss(logits, targets)
         return loss, logits
-    
-    def after_training_eval(self, eval_dataset: ProbeDataset, save_location: str):
-        super().after_training_eval(eval_dataset, save_location)
-        abs_weights = torch.abs(self.linear.weight)
-        topk_features = torch.topk(abs_weights, k=self.k, dim=1).indices
-        top_weights = torch.topk(abs_weights, k=self.k+3, dim=1).values
-        with open(save_location, 'a') as f:
-            f.write(f"\nTop weights by board position and class:\n{top_weights.reshape((-1, 3, self.k+3))}\n\nTop {self.k} features by board position and class:\n{topk_features.reshape((-1, 3, self.k))}")
     
 class K_Annealing_Probe(Leaky_Topk_Probe):
     def __init__(self, model_to_probe: SAEforProbing, input_dim: int, epsilon: float, k_start: int, anneal_start: int, k_end: int):
