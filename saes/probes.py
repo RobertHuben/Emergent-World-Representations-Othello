@@ -173,11 +173,13 @@ class LinearProbe(torch.nn.Module):
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         self.compute_accuracy(logits, targets)
         abs_weights = torch.abs(self.linear.weight)
-        topk_features = torch.topk(abs_weights, k=4, dim=1).indices
+        top4_features = torch.topk(abs_weights, k=4, dim=1).indices
+        top4_weights = self.linear.weight.gather(1, top4_features)
         with open(save_location, 'a') as f:
             f.write(f"Average accuracy: {self.accuracy}\n")
             f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
-            f.write(f"\nTop 4 features by board position and class:\n{topk_features.reshape((8, 8, 3, 4))}")
+            f.write(f"\nTop 4 features by board position and class:\n{top4_features.reshape((8, 8, 3, 4))}\n")
+            f.write(f"\nTop 4 weights by board position and class:\n{top4_weights.reshape((8, 8, 3, 4))}")
 
 class L1_Sparse_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, input_dim: int, sparsity_coeff: float):
