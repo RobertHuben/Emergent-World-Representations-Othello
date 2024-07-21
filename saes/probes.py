@@ -247,3 +247,7 @@ class K_Annealing_Probe(Leaky_Topk_Probe):
             self.k_continuous -= self.k_step
             self.k = round(self.k_continuous)
         return
+    
+class Gated_Probe(LinearProbe):
+    def __init__(self, model_to_probe: Module, input_dim: int):
+        super().__init__(model_to_probe, input_dim)

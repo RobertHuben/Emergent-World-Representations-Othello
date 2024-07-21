@@ -137,11 +137,9 @@ if __name__=="__main__":
         params_list.append((k, 0.005))
     leaky_topk_probe_sweep(sae_location, params_list)
  """
-    """ params_list = []
-    for k_start in [1024, 512, 100]:
-        for anneal_start in [0, 1000]:
-            if (k_start, anneal_start) in [(1024, 0), (1024, 1000), (512, 0)]:
-                continue
+    params_list = []
+    for k_start in [1024]:
+        for anneal_start in [0]:
             for k_end in [1, 2, 3]:
-                params_list.append((0.005, k_start, anneal_start, k_end))
-    k_annealing_probe_sweep(sae_location, params_list) """
+                params_list.append((0, k_start, anneal_start, k_end))
+    k_annealing_probe_sweep(sae_location, params_list)
