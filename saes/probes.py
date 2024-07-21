@@ -183,7 +183,8 @@ class LinearProbe(torch.nn.Module):
             f.write(f"\nTop 4 weights by board position and class:\n{top4_weights.reshape((8, 8, 3, 4))}")
 
 class L1_Sparse_Probe(LinearProbe):
-    def __init__(self, model_to_probe: SAEforProbing, input_dim: int, sparsity_coeff: float):
+    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float):
+        input_dim = model_to_probe.sae.num_features
         super().__init__(model_to_probe, input_dim)
         self.sparsity_coeff = sparsity_coeff
 
@@ -196,7 +197,8 @@ class L1_Sparse_Probe(LinearProbe):
         return loss, logits
     
 class Without_Topk_Sparse_Probe(LinearProbe):
-    def __init__(self, model_to_probe: SAEforProbing, input_dim: int, k: int, sparsity_coeff: float):
+    def __init__(self, model_to_probe: SAEforProbing, k: int, sparsity_coeff: float):
+        input_dim = model_to_probe.sae.num_features
         super().__init__(model_to_probe, input_dim)
         self.sparsity_coeff = sparsity_coeff
         self.k = k
@@ -215,7 +217,8 @@ class Without_Topk_Sparse_Probe(LinearProbe):
         return loss, logits
       
 class Leaky_Topk_Probe(LinearProbe):
-    def __init__(self, model_to_probe: SAEforProbing, input_dim: int, k: int, epsilon: float):
+    def __init__(self, model_to_probe: SAEforProbing, k: int, epsilon: float):
+        input_dim = model_to_probe.sae.num_features
         super().__init__(model_to_probe, input_dim)
         self.k = k
         self.epsilon = epsilon
@@ -229,7 +232,8 @@ class Leaky_Topk_Probe(LinearProbe):
         return loss, logits
     
 class K_Annealing_Probe(Leaky_Topk_Probe):
-    def __init__(self, model_to_probe: SAEforProbing, input_dim: int, epsilon: float, k_start: int, anneal_start: int, k_end: int):
+    def __init__(self, model_to_probe: SAEforProbing, epsilon: float, k_start: int, anneal_start: int, k_end: int):
+        input_dim = model_to_probe.sae.num_features
         super().__init__(model_to_probe, input_dim, k_start, epsilon)
         self.k_start = k_start
         self.anneal_start = anneal_start
@@ -254,5 +258,29 @@ class K_Annealing_Probe(Leaky_Topk_Probe):
         return
     
 class Gated_Probe(LinearProbe):
-    def __init__(self, model_to_probe: Module, input_dim: int):
-        super().__init__(model_to_probe, input_dim)
+    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float):
+        Module.__init__(self)
+        self.model_to_probe = model_to_probe
+        self.sparsity_coeff = sparsity_coeff
+        self.num_data_trained_on=0
+        self.accuracy = None
+        self.accuracy_by_board_position = None
+
+        for param in model_to_probe.parameters():
+            param.requires_grad=False
+
+        num_features = self.model_to_probe.sae.num_features
+        self.feature_choice = torch.nn.Parameter(torch.ones((64, num_features)))
+        self.weight = torch.nn.Parameter(torch.randn((64, 3, num_features)))
+        self.bias = torch.nn.Parameter(torch.zeros(64, 3))
+
+    def forward(self, activations, targets):
+        normalized_feature_choice = F.normalize(F.relu(self.feature_choice), p=2, dim=-1)
+        normalized_weight = F.normalize(self.weight, p=2, dim=-1)
+        activations_chosen = normalized_feature_choice * activations.unsqueeze(-2)
+        logits = torch.einsum("ijk,...ik->...ij", normalized_weight, activations_chosen) + self.bias
+
+        sparsity_loss = torch.norm(normalized_feature_choice, p=1, dim=-1).mean()
+        accuracy_loss = super().loss(logits, targets)
+        loss = accuracy_loss + self.sparsity_coeff*sparsity_loss
+        return loss, logits
