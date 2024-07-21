@@ -116,7 +116,7 @@ def gated_probe_sweep(sae_location:str, sparsity_coeff_list:list):
     sae_to_probe = SAEforProbing(sae)
     training_params = TrainingParams(num_train_data=500000)
     for coeff in sparsity_coeff_list:
-        probe_name = f"L1_probe___sae={sae_name}___coeff={coeff}"
+        probe_name = f"gated_L1_probe___sae={sae_name}___coeff={coeff}"
         probe = Gated_Probe(sae_to_probe, sparsity_coeff=coeff)
         print(f"Training {probe_name}.\n")
         train_probe(probe, probe_name, train_params=training_params, eval_after=True)
