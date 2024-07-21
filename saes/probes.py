@@ -76,7 +76,7 @@ class LinearProbe(torch.nn.Module):
         return loss, logits
     
     def loss(self, logits, targets):
-        return F.cross_entropy(logits.view(-1, 3), targets.reshape(-1), ignore_index=-100)
+        return F.cross_entropy(logits.reshape(-1, 3), targets.reshape(-1), ignore_index=-100)
     
     def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=1, report_every_n_data=500, learning_rate=1e-3, fixed_seed=1337):
         '''
