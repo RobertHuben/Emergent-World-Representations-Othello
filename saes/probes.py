@@ -240,8 +240,8 @@ class K_Annealing_Probe(Leaky_Topk_Probe):
         num_steps = len(train_dataset) * num_epochs / batch_size
         #self.k_step = (self.k_start - self.k_end)/(num_steps - self.anneal_start)
         self.a = self.model_to_probe.sae.num_features - self.k_end + 0.5
-        self.b = -math.log(0.5/self.a)/num_steps
-        self.c = self.k_start - 0.5
+        self.b = math.log(0.5/self.a)/num_steps
+        self.c = self.k_end - 0.5
         return
     
     def after_step_update(self, step=None):
