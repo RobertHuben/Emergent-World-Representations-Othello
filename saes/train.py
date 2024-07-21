@@ -48,6 +48,7 @@ def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingPara
 
 def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=default_train_params, save_dir="trained_probes", eval_after=False):
     train_dataset, test_dataset = load_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
+    #probe.after_training_eval(ProbeDataset(test_dataset), save_location="test") #for testing
     probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
 
     date_prefix=datetime.today().strftime("%m_%d")

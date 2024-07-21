@@ -290,9 +290,11 @@ class Gated_Probe(LinearProbe):
             eval_dataset = ProbeDataset(eval_dataset)
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         self.compute_accuracy(logits, targets)
-        abs_weights = torch.abs(self.weight)
-        top4_features = torch.topk(abs_weights, k=4, dim=1).indices
-        top4_weights = self.weight.gather(1, top4_features)
+        normalized_feature_choice = F.normalize(F.relu(self.feature_choice), p=2, dim=-1)
+        normalized_weight = F.normalize(self.weight, p=2, dim=-1)
+        combined_weights = normalized_feature_choice.unsqueeze(-2) * normalized_weight
+        top4_features = torch.topk(torch.abs(combined_weights), k=4, dim=-1).indices
+        top4_weights = combined_weights.gather(-1, top4_features)
         with open(save_location, 'a') as f:
             f.write(f"Average accuracy: {self.accuracy}\n")
             f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
