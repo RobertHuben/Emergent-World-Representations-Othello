@@ -284,3 +284,17 @@ class Gated_Probe(LinearProbe):
         accuracy_loss = super().loss(logits, targets)
         loss = accuracy_loss + self.sparsity_coeff*sparsity_loss
         return loss, logits
+
+    def after_training_eval(self, eval_dataset:ProbeDataset, save_location:str):
+        if not isinstance(eval_dataset, ProbeDataset):
+            eval_dataset = ProbeDataset(eval_dataset)
+        losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
+        self.compute_accuracy(logits, targets)
+        abs_weights = torch.abs(self.weight)
+        top4_features = torch.topk(abs_weights, k=4, dim=1).indices
+        top4_weights = self.weight.gather(1, top4_features)
+        with open(save_location, 'a') as f:
+            f.write(f"Average accuracy: {self.accuracy}\n")
+            f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
+            f.write(f"\nTop 4 features by board position and class:\n{top4_features.reshape((8, 8, 3, 4))}\n")
+            f.write(f"\nTop 4 weights by board position and class:\n{top4_weights.reshape((8, 8, 3, 4))}")
