@@ -7,6 +7,7 @@ sys.path.append(os.path.join( os.path.dirname ( __file__), os.path.pardir))
 import torch
 from torch.nn import functional as F
 import numpy as np
+import math
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from EWOthello.mingpt.dataset import CharDataset
@@ -237,15 +238,19 @@ class K_Annealing_Probe(Leaky_Topk_Probe):
 
     def training_prep(self, train_dataset=None, batch_size=None, num_epochs=None):
         num_steps = len(train_dataset) * num_epochs / batch_size
-        self.k_step = (self.k_start - self.k_end)/(num_steps - self.anneal_start)
+        #self.k_step = (self.k_start - self.k_end)/(num_steps - self.anneal_start)
+        self.a = self.model_to_probe.sae.num_features - self.k_end + 0.5
+        self.b = -math.log(0.5/self.a)/num_steps
+        self.c = self.k_start - 0.5
         return
     
     def after_step_update(self, step=None):
-        if step >= self.anneal_start:
+        """ if step >= self.anneal_start:
             if step == self.anneal_start:
                 print("\nStarting annealing now.\n")
             self.k_continuous -= self.k_step
-            self.k = round(self.k_continuous)
+            self.k = round(self.k_continuous) """
+        self.k = round(self.a*math.exp(self.b*step) + self.c)
         return
     
 class Gated_Probe(LinearProbe):
