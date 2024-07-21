@@ -280,7 +280,7 @@ class Gated_Probe(LinearProbe):
         activations_chosen = normalized_feature_choice * activations.unsqueeze(-2)
         logits = torch.einsum("ijk,...ik->...ij", normalized_weight, activations_chosen) + self.bias
 
-        sparsity_loss = torch.norm(normalized_feature_choice, p=1, dim=-1).mean()
+        sparsity_loss = normalized_feature_choice.mean()
         accuracy_loss = super().loss(logits, targets)
         loss = accuracy_loss + self.sparsity_coeff*sparsity_loss
         return loss, logits
