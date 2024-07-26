@@ -181,5 +181,54 @@ def plot_many_saes(prefix, dir="trained_models"):
     plt.savefig("Comparison.jpg")
     return
 
+@torch.inference_mode()
+def compute_feature_frequency(sae):
+    _, dataset = load_datasets_automatic(train_size=1, test_size=1000)
+    _, hidden_layers, __=sae.catenate_outputs_on_dataset(dataset, include_loss=False)
+    frequencies=(hidden_layers.flatten(end_dim=-2)>0).mean(dim=0, dtype=float)
+    frequencies=torch.sort(frequencies).values
+    good_classifier_indices=torch.nonzero(sae.classifier_smds>2)[:,0].tolist()
+
+    plt.scatter(range(len(frequencies)), torch.sort(frequencies).values)
+    plt.scatter(good_classifier_indices, torch.sort(frequencies).values[good_classifier_indices])
+    return
+
+@torch.inference_mode()
+def board_state_frequency_vs_smd(sae, include_aurocs=False):
+    smds=sae.classifier_smds.max(dim=0).values
+    board_state_frequencies=torch.zeros(smds.shape)
+    _, dataset = load_datasets_automatic(train_size=1, test_size=1000)
+    _, hidden_layers, __=sae.catenate_outputs_on_dataset(dataset, include_loss=False)
+
+    board_states= get_board_states(dataset)
+    board_states=sae.trim_to_window(board_states)
+    hidden_layers=hidden_layers.flatten(end_dim=-2)
+    board_states=board_states.flatten(end_dim=-2)
+    game_not_ended_mask=board_states[:,0]>-100
+    hidden_layers=hidden_layers[game_not_ended_mask]
+    board_states=board_states[game_not_ended_mask]
+    
+    for piece_class in range(3):
+        board_state_frequencies[:, piece_class]=(board_states==piece_class).mean(dim=0, dtype=float)
+    if include_aurocs:
+        sae.compute_all_aurocs(dataset)
+        best_aurocs=sae.classifier_aurocs.max(dim=0).values
+        plt.scatter(board_state_frequencies, best_aurocs)
+    else:
+        plt.scatter(board_state_frequencies, smds)
+    plt.xlabel("Board State Feature Frequency")
+    plt.ylabel("Best SMD")
+    plt.title("Frequency vs SMD for 64x3 board states and piece classes")
+    plt.savefig("frequency_vs_smd.png")
+    return
+
 if __name__=="__main__":
-    pass
+    sae_locations=[ 'trained_models/07_10_top_k_sae_1024_features_100_sparsity.pkl.pkl',
+                    # 'trained_models/07_10_top_k_sae_1024_features_150_sparsity.pkl.pkl',
+                    # 'trained_models/07_11_top_k_sae_1024_features_200_sparsity.pkl.pkl',
+                    # 'trained_models/07_12_saeAnthropic_1024_features_4_sparsity.pkl',
+    ]
+    for sae_location in sae_locations:
+        sae=torch.load(sae_location, map_location=device)
+        board_state_frequency_vs_smd(sae, include_aurocs=True)
+    plt.show()

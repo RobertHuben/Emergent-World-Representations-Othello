@@ -39,6 +39,16 @@ class SAETemplate(torch.nn.Module, ABC):
             self.average_residual_stream_norm=torch.ones((1))
             logger.warning("Please ensure the correct files are in saes/model_params/residual_stream_mean.pkl and saes/model_params/average_residual_stream_norm.pkl!")
 
+    def create_linear_encoder_decoder(self, decoder_initialization_scale):
+        residual_stream_size=self.gpt.pos_emb.shape[-1]
+        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
+        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=1).unsqueeze(-1) # columns of norm 1
+        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
+        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
+        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
+        self.decoder=torch.nn.Parameter(decoder_initial_value)
+        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
+
     def trim_to_window(self, input, offset=0):
         '''
         trims the tensor input from shape (n_batch, l_window, d_model) to (n_batch, l_window - window_start_trim - window_end_trim, d_model)'''
