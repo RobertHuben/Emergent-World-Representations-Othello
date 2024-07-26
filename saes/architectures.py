@@ -17,7 +17,7 @@ class SAEAnthropic(SAETemplate):
         self.sparsity_coefficient=sparsity_coefficient
         residual_stream_size=gpt.pos_emb.shape[-1]
         decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
-        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
+        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=1).unsqueeze(-1) # columns of norm 1
         decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
         self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
         self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
@@ -44,8 +44,8 @@ class SAEAnthropic(SAETemplate):
         return F.relu(encoder_output)
 
     def sparsity_loss_function(self, hidden_layer):
-        decoder_row_norms=self.decoder.norm(dim=1)
-        return torch.mean(hidden_layer*decoder_row_norms)
+        decoder_column_norms=self.decoder.norm(dim=1)
+        return torch.mean(hidden_layer*decoder_column_norms)
     
     def report_model_specific_features(self):
         return [f"Sparsity loss coefficient: {self.sparsity_coefficient}"]
@@ -103,6 +103,8 @@ class MultiHeadedTopKSAE(SAETemplate):
 
 #supported variants: mag_in_aux_loss, relu_only
 #setting no_aux_loss=True implements a gated sae in a different way from the paper that makes more sense to me
+#currently uses tied weights only
+#to try: untied weights original version, as well as using sigmoid instead of step function for training to avoid aux_loss
 class Gated_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, no_aux_loss=False, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
@@ -116,11 +118,11 @@ class Gated_SAE(SAEAnthropic):
             encoder = F.normalize(self.encoder, p=2, dim=1)
         else:
             encoder = self.encoder
-        encoding = residual_stream @ encoder
+        encoding = (residual_stream - self.decoder_bias) @ encoder
         if self.no_aux_loss:
-            hidden_layer = (F.relu(encoding + self.b_gate) - self.b_gate) * torch.exp(self.r_mag) + self.b_mag
+            hidden_layer = F.relu(encoding + self.b_gate) * torch.exp(self.r_mag) + self.b_mag #is b_mag really necessary here?
         else:
-            hidden_layer_before_gating = encoding * torch.exp(self.r_mag) + self.b_mag
+            hidden_layer_before_gating = F.relu(encoding * torch.exp(self.r_mag) + self.b_mag)
             hidden_layer = ((encoding + self.b_gate) > 0) * hidden_layer_before_gating
         normalized_decoder = F.normalize(self.decoder, p=2, dim=1)
         reconstructed_residual_stream = hidden_layer @ normalized_decoder + self.decoder_bias
@@ -196,6 +198,9 @@ class Smoothed_L0_SAE(SAEAnthropic):
         transitions = [{"x":self.epsilon, "epsilon":self.epsilon, "delta":self.delta, "focus":"left"}]
         return torch.mean(smoothed_piecewise(normalized_hidden_layer, functions, transitions))
     
+    def report_model_specific_eval_results(self, hidden_layers=None):
+        [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
+    
 class Without_TopK_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int):
         super().__init__(gpt, num_features, sparsity_coefficient)
@@ -216,12 +221,14 @@ class Without_TopK_SAE(SAEAnthropic):
 #         super().__init__(gpt, num_features, 0.0, window_start_trim, window_end_trim)
 #     def sparsity_loss_function(self, hidden_layer):
 #         return 0.0
-    
+
+#suppression_mode can be "relative" or "absolute"
 class Leaky_Topk_SAE(SAETemplate):
-    def __init__(self, gpt: GPTforProbing, num_features: int, epsilon: float, k:int, decoder_initialization_scale=0.1):
+    def __init__(self, gpt: GPTforProbing, num_features: int, epsilon: float, k:int, suppression_mode="relative", decoder_initialization_scale=0.1):
         super().__init__(gpt=gpt, num_features=num_features)
         self.epsilon = epsilon
         self.k=k
+        self.suppression_mode = suppression_mode
         residual_stream_size=gpt.pos_emb.shape[-1]
         decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
         decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
@@ -234,7 +241,7 @@ class Leaky_Topk_SAE(SAETemplate):
     def activation_function(self, encoder_output):
         activations = F.relu(encoder_output)
         kth_value = torch.topk(activations, k=self.k).values.min(dim=-1).values
-        return suppress_lower_activations(activations, kth_value, epsilon=self.epsilon, mode='relative')
+        return suppress_lower_activations(activations, kth_value, epsilon=self.epsilon, mode=self.suppression_mode)
     
     def forward(self, residual_stream, compute_loss=False):
         '''
@@ -245,8 +252,10 @@ class Leaky_Topk_SAE(SAETemplate):
             - hidden_layer is of shape (B, W, D') where D' is the size of the hidden layer
             - reconstructed_residual_stream is shape (B, W, D) 
         '''
-        hidden_layer=self.activation_function(residual_stream @ self.encoder + self.encoder_bias)
-        reconstructed_residual_stream=hidden_layer @ self.decoder + self.decoder_bias
+        normalized_encoder = F.normalize(self.encoder, p=2, dim=1) #normalize columns
+        normalized_decoder = F.normalize(self.decoder, p=2, dim=1) #normalize columns
+        hidden_layer=self.activation_function((residual_stream - self.decoder_bias) @ normalized_encoder + self.encoder_bias)
+        reconstructed_residual_stream=hidden_layer @ normalized_decoder + self.decoder_bias
         loss= self.reconstruction_error(residual_stream, reconstructed_residual_stream) if compute_loss else None
         return loss, residual_stream, hidden_layer, reconstructed_residual_stream
 
@@ -271,6 +280,9 @@ class K_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
             self.k_continuous += self.k_step
             self.k = round(self.k_continuous)
         return
+    
+    def report_model_specific_eval_results(self, hidden_layers=None):
+        [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
     
 class Random_Leaky_Topk_SAE(Leaky_Topk_SAE):
     '''
@@ -305,6 +317,9 @@ class Random_Leaky_Topk_SAE(Leaky_Topk_SAE):
     def eval(self):
         self.k = self.k_mean
         return super().eval()
+    
+    def report_model_specific_eval_results(self, hidden_layers=None):
+        [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
 
 class Top_L1_Proportion_SAE(SAETemplate):
     def __init__(self, gpt: GPTforProbing, num_features: int, L1_proportion_to_remove: float, decoder_initialization_scale=0.1):
@@ -362,6 +377,11 @@ class Dimension_Reduction_SAE(SAEAnthropic):
 
     def activation_function(self, encoder_output):
         return self.activation_f(encoder_output)
+    
+    #need to override loss function of SAEAnthropic, or else inherit from SAETemplate
+    
+    def report_model_specific_eval_results(self, hidden_layers=None):
+        [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
     
 class CallableConstant(object):
     def __init__(self, constant): self.constant = constant
@@ -448,7 +468,8 @@ def suppress_lower_activations(t, bound, epsilon, inclusive=True, mode="absolute
     above_only = t * above_mask
     below_only = t * (~above_mask)
     if mode == "absolute":
-        return above_only + epsilon/bound * below_only
+        bad_bound_mask = bound <= 0 #to make sure we don't divide by 0
+        return above_only + (~bad_bound_mask)*epsilon/(bound+bad_bound_mask) * below_only
     elif mode == "relative":
         return above_only + epsilon * below_only
 

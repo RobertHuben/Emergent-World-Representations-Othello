@@ -140,10 +140,10 @@ class SAETemplate(torch.nn.Module, ABC):
                 loss.backward()
                 optimizer.step()
 
-                self.after_step_update(hidden_layer=hidden_layer, step=step)
-
                 if step % report_on_batch_number==0:
                     self.print_evaluation(loss, eval_dataset, step_number=step)
+
+                self.after_step_update(hidden_layer=hidden_layer, step=step)
         else:
             self.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
         self.eval()
@@ -187,6 +187,7 @@ class SAETemplate(torch.nn.Module, ABC):
                 f"    Reconstruction Loss: {reconstruction_error:.3f}",
                 f"    L0 Sparsity: {l0_sparsity:.1f}", 
                 f"    Dead features: {dead_features:.0f}", ])
+            information.extend(self.report_model_specific_eval_results(hidden_layers=hidden_layers))
         return "\n".join(information)
 
     def report_model_specific_features(self):
@@ -194,6 +195,14 @@ class SAETemplate(torch.nn.Module, ABC):
         returns a list of strings, describing features specific to the type of SAE, such as hyperparameters
         '''
         return ["No model-specific features"]
+    
+    #just takes hidden_layers for now, but feel free to add other inputs as needed
+    def report_model_specific_eval_results(self, hidden_layers=None):
+        '''
+        returns a list of strings, describing eval results specific to the type of SAE, such as different types of sparsity measures
+        '''
+        return []
+
 
     @abstractmethod
     def forward(self, residual_stream, compute_loss=False):

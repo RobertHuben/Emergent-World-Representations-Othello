@@ -1,5 +1,8 @@
 import torch
+from typing import Union
 from sae_template import SAETemplate
+from probes import LinearProbe, ProbeDataset
+from EWOthello.mingpt.model import GPTforProbing
 from utils import load_datasets_automatic
 from datetime import datetime
 import os
@@ -13,6 +16,7 @@ class TrainingParams:
         self.report_every_n_data=report_every_n_data
 
 default_train_params=TrainingParams()
+test_train_params=TrainingParams(num_test_data=100, report_every_n_data=500)
 
 def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingParams=default_train_params, save_dir="trained_models", print_results=True):
     '''
@@ -41,5 +45,20 @@ def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingPara
         print(this_message, file=f)
     torch.save(sae, f"{save_dir}/{date_prefix}_{save_name}.pkl")
     return sae
+
+def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=default_train_params, save_dir="trained_probes", eval_after=False):
+    train_dataset, test_dataset = load_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
+    #probe.after_training_eval(ProbeDataset(test_dataset), save_location="test") #for testing
+    probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
+
+    date_prefix=datetime.today().strftime("%m_%d")
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+    torch.save(probe, f"{save_dir}/{date_prefix}_{save_name}.pkl")
+
+    if eval_after:
+        probe_test_dataset = ProbeDataset(test_dataset)
+        probe.after_training_eval(probe_test_dataset, f"{save_dir}/{date_prefix}_{save_name}_eval.txt")
+    return probe
 
 

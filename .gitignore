@@ -5,3 +5,6 @@ probe_evals/*
 *.pyc
 .gitignore
 test.py
+trained_models/*
+trained_probes/*
+analysis_results/*
