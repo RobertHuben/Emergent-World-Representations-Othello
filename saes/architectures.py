@@ -15,15 +15,7 @@ class SAEAnthropic(SAETemplate):
     def __init__(self, gpt:GPTforProbing, num_features:int, sparsity_coefficient:float, decoder_initialization_scale=0.1):
         super().__init__(gpt=gpt, num_features=num_features)
         self.sparsity_coefficient=sparsity_coefficient
-        residual_stream_size=gpt.pos_emb.shape[-1]
-        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
-        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=1).unsqueeze(-1) # columns of norm 1
-        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
-        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
-        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
-        self.decoder=torch.nn.Parameter(decoder_initial_value)
-        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
-
+        self.encoder, self.encoder_bias, self.decoder, self.decoder_bias=self.create_linear_encoder_decoder(decoder_initialization_scale)
 
     def forward(self, residual_stream, compute_loss=False):
         hidden_layer=self.activation_function(residual_stream @ self.encoder + self.encoder_bias)
@@ -68,14 +60,7 @@ class MultiHeadedTopKSAE(SAETemplate):
         super().__init__(gpt=gpt, num_features=num_features)
         self.sparsity=sparsity
         self.num_heads=num_heads
-        residual_stream_size=gpt.pos_emb.shape[-1]
-        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
-        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
-        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
-        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
-        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
-        self.decoder=torch.nn.Parameter(decoder_initial_value)
-        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
+        self.encoder, self.encoder_bias, self.decoder, self.decoder_bias=self.create_linear_encoder_decoder(decoder_initialization_scale)
 
     def activation_function(self, encoder_output):
         activations = F.relu(encoder_output)
@@ -229,14 +214,7 @@ class Leaky_Topk_SAE(SAETemplate):
         self.epsilon = epsilon
         self.k=k
         self.suppression_mode = suppression_mode
-        residual_stream_size=gpt.pos_emb.shape[-1]
-        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
-        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
-        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
-        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
-        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
-        self.decoder=torch.nn.Parameter(decoder_initial_value)
-        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
+        self.encoder, self.encoder_bias, self.decoder, self.decoder_bias=self.create_linear_encoder_decoder(decoder_initialization_scale)
 
     def activation_function(self, encoder_output):
         activations = F.relu(encoder_output)
@@ -325,15 +303,7 @@ class Top_L1_Proportion_SAE(SAETemplate):
     def __init__(self, gpt: GPTforProbing, num_features: int, L1_proportion_to_remove: float, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features)
         self.proportion = L1_proportion_to_remove
-        residual_stream_size=gpt.pos_emb.shape[-1]
-        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
-        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
-        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
-        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
-        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
-        self.decoder=torch.nn.Parameter(decoder_initial_value)
-        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
-        self.lower_triangle_ones = torch.Tensor([[1 if i >= j else 0 for j in range(num_features)] for i in range(num_features)]).to(device)
+        self.encoder, self.encoder_bias, self.decoder, self.decoder_bias=self.create_linear_encoder_decoder(decoder_initialization_scale)
 
     def forward(self, residual_stream, compute_loss=False):
         '''
