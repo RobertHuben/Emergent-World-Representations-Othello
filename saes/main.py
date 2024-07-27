@@ -160,6 +160,6 @@ if __name__=="__main__":
 
     params_list = []
     for coeff in [1, 10, 40]:
-        for init in ["zeros", "random"]:
+        for init in ["random"]:
             params_list.append((coeff, init))
     L1_gated_probe_sweep(sae_location, params_list)
