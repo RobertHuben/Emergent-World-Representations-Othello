@@ -131,6 +131,13 @@ if __name__=="__main__":
 
     #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
+    
+    sae = torch.load(sae_location, map_location=device)
+    probe = LinearProbe(model_to_probe=SAEforProbing(sae), input_dim=1024)
+    train_params=TrainingParams()
+    train_dataset, test_dataset = load_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
+    probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
+
 
     """ params_list = [1, 10, 20, 30, 40]
     L1_probe_sweep(sae_location, params_list)
