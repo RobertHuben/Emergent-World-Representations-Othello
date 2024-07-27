@@ -165,11 +165,11 @@ if __name__=="__main__":
                 params_list.append((epsilon, k_start, anneal_start, k_end))
     k_annealing_probe_sweep(sae_location, params_list) """
 
-    params_list = []
+    """ params_list = []
     for coeff in [0, 0.01, 0.1]:
         for init in ["random"]:
             params_list.append((coeff, init))
-    L1_gated_probe_sweep(sae_location, params_list)
+    L1_gated_probe_sweep(sae_location, params_list) """
 
     #test a constant probe
     """ sae = torch.load(sae_location, map_location=device)
