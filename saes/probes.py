@@ -182,6 +182,16 @@ class LinearProbe(torch.nn.Module):
             f.write(f"\nTop 4 features by board position and class:\n{top4_features.reshape((8, 8, 3, 4))}\n")
             f.write(f"\nTop 4 weights by board position and class:\n{top4_weights.reshape((8, 8, 3, 4))}")
 
+class Constant_Probe(LinearProbe):
+    def __init__(self, model_to_probe: Module, input_dim: int):
+        super().__init__(model_to_probe, input_dim)
+        self.zeros = torch.zeros((input_dim, 64*3)).to(device)
+
+    def forward(self, activations, targets):
+        logits = activations @ self.zeros + self.linear.bias
+        loss = self.loss(logits, targets)
+        return loss, logits
+
 class L1_Sparse_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float):
         input_dim = model_to_probe.sae.num_features
@@ -307,5 +317,5 @@ class L1_Gated_Probe(LinearProbe):
             f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
             f.write(f"\nTop 4 features by board position and class:\n{top4_features.reshape((8, 8, 3, 4))}\n")
             f.write(f"\nTop 4 weights by board position and class:\n{top4_weights.reshape((8, 8, 3, 4))}\n")
-            f.write(f"\nTop 4 features choices by board position and class:\n{top4_feature_choices.reshape((8, 8, 4))}\n")
-            f.write(f"\nTop 4 chosen weights by board position and class:\n{top4_feature_choice_weights.reshape((8, 8, 4))}")
+            f.write(f"\nTop 4 features choices by board position:\n{top4_feature_choices.reshape((8, 8, 4))}\n")
+            f.write(f"\nTop 4 chosen weights by board position:\n{top4_feature_choice_weights.reshape((8, 8, 4))}")
