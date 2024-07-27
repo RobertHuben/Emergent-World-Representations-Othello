@@ -135,28 +135,26 @@ if __name__=="__main__":
     sae = torch.load(sae_location, map_location=device)
     probe = LinearProbe(model_to_probe=SAEforProbing(sae), input_dim=1024)
     train_params=TrainingParams()
-    train_dataset, test_dataset = load_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
-    probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
+    sae_name = sae_location.split('/')[-1][:-4]
+    probe_name = f"linear_probe_sae={sae_name}"
+    train_probe(probe, probe_name, eval_after=True)
 
-
-    """ params_list = [1, 10, 20, 30, 40]
+    params_list = [0, 0.01]
     L1_probe_sweep(sae_location, params_list)
- """
 
-    """ params_list = []
-    for coeff in [100, 150]:
-        for k in [1, 2, 3]:
-            if (coeff, k) == (100, 1):
-                continue
+
+    params_list = []
+    for coeff in [0, 0.01]:
+        for k in [2]:
             params_list.append((k, coeff))
     without_topk_probe_sweep(sae_location, params_list)
- """
-    """ params_list = []
-    for k in [1, 2, 3]:
-        epsilon = 0.005
+
+    params_list = []
+    for k in [1024]:
+        epsilon = 0
         params_list.append((k, epsilon))
     leaky_topk_probe_sweep(sae_location, params_list)
- """
+
     """ params_list = []
     for k_start in [1024]:
         for anneal_start in [0]:
