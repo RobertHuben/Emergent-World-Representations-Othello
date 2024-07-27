@@ -257,8 +257,8 @@ class K_Annealing_Probe(Leaky_Topk_Probe):
         self.k = round(self.a*math.exp(self.b*step) + self.c)
         return
     
-class Gated_Probe(LinearProbe):
-    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float):
+class L1_Gated_Probe(LinearProbe):
+    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float, init_type="ones"):
         Module.__init__(self)
         self.model_to_probe = model_to_probe
         self.sparsity_coeff = sparsity_coeff
@@ -270,7 +270,12 @@ class Gated_Probe(LinearProbe):
             param.requires_grad=False
 
         num_features = self.model_to_probe.sae.num_features
-        self.feature_choice = torch.nn.Parameter(torch.ones((64, num_features)))
+        if init_type == "ones":
+            self.feature_choice = torch.nn.Parameter(torch.ones((64, num_features)))
+        elif init_type == "zeros":
+            self.feature_choice = torch.nn.Parameter(torch.zeros((64, num_features)))
+        elif init_type == "random":
+            self.feature_choice = torch.nn.Parameter(torch.abs(torch.randn((64, num_features))))
         self.weight = torch.nn.Parameter(torch.randn((64, 3, num_features)))
         self.bias = torch.nn.Parameter(torch.zeros(64, 3))
 
@@ -280,7 +285,7 @@ class Gated_Probe(LinearProbe):
         activations_chosen = normalized_feature_choice * activations.unsqueeze(-2)
         logits = torch.einsum("ijk,...ik->...ij", normalized_weight, activations_chosen) + self.bias
 
-        sparsity_loss = normalized_feature_choice.mean()
+        sparsity_loss = normalized_feature_choice.mean() #note that all elements of normalized_feature_choice are already non-negative
         accuracy_loss = super().loss(logits, targets)
         loss = accuracy_loss + self.sparsity_coeff*sparsity_loss
         return loss, logits
@@ -295,8 +300,12 @@ class Gated_Probe(LinearProbe):
         combined_weights = normalized_feature_choice.unsqueeze(-2) * normalized_weight
         top4_features = torch.topk(torch.abs(combined_weights), k=4, dim=-1).indices
         top4_weights = combined_weights.gather(-1, top4_features)
+        top4_feature_choices = torch.topk(torch.abs(normalized_feature_choice), k=4, dim=-1).indices
+        top4_feature_choice_weights = normalized_feature_choice.gather(-1, top4_feature_choices)
         with open(save_location, 'a') as f:
             f.write(f"Average accuracy: {self.accuracy}\n")
             f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
             f.write(f"\nTop 4 features by board position and class:\n{top4_features.reshape((8, 8, 3, 4))}\n")
-            f.write(f"\nTop 4 weights by board position and class:\n{top4_weights.reshape((8, 8, 3, 4))}")
+            f.write(f"\nTop 4 weights by board position and class:\n{top4_weights.reshape((8, 8, 3, 4))}\n")
+            f.write(f"\nTop 4 features choices by board position and class:\n{top4_feature_choices.reshape((8, 8, 4))}\n")
+            f.write(f"\nTop 4 chosen weights by board position and class:\n{top4_feature_choice_weights.reshape((8, 8, 4))}")

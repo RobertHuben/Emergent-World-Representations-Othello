@@ -10,7 +10,7 @@ from saes.architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae, test_train_params, train_probe
-from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, Gated_Probe, SAEforProbing
+from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, L1_Gated_Probe, SAEforProbing
 from train import TrainingParams
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
@@ -110,14 +110,14 @@ def k_annealing_probe_sweep(sae_location:str, params_list:list):
         print(f"Training {probe_name}.\n")
         train_probe(probe, probe_name, train_params=training_params, eval_after=True)
 
-def gated_probe_sweep(sae_location:str, sparsity_coeff_list:list):
+def L1_gated_probe_sweep(sae_location:str, params_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
     training_params = TrainingParams(num_train_data=500000)
-    for coeff in sparsity_coeff_list:
-        probe_name = f"gated_L1_probe___sae={sae_name}___coeff={coeff}"
-        probe = Gated_Probe(sae_to_probe, sparsity_coeff=coeff)
+    for coeff, init in params_list:
+        probe_name = f"gated_L1_probe___sae={sae_name}___coeff={coeff}_init={init}"
+        probe = L1_Gated_Probe(sae_to_probe, sparsity_coeff=coeff, init_type=init)
         print(f"Training {probe_name}.\n")
         train_probe(probe, probe_name, train_params=training_params, eval_after=True)
 
@@ -158,5 +158,8 @@ if __name__=="__main__":
                 params_list.append((epsilon, k_start, anneal_start, k_end))
     k_annealing_probe_sweep(sae_location, params_list) """
 
-    params_list = [1, 5, 10, 20, 40, 80]
-    gated_probe_sweep(sae_location, params_list)
+    params_list = []
+    for coeff in [1, 10, 40]:
+        for init in ["ones", "zeros", "random"]:
+            params_list.append((coeff, init))
+    L1_gated_probe_sweep(sae_location, params_list)
