@@ -139,12 +139,12 @@ if __name__=="__main__":
     probe_name = f"linear_probe_sae={sae_name}"
     train_probe(probe, probe_name, eval_after=True) """
 
-    """ params_list = [1, 10, 50]
+    params_list = [10, 20, 30]
     L1_probe_sweep(sae_location, params_list)
- """
+
 
     """ params_list = []
-    for coeff in [1, 10, 50]:
+    for coeff in [1, 10, 20]:
         for k in [1, 2, 3]:
             params_list.append((k, coeff))
     without_topk_probe_sweep(sae_location, params_list)
@@ -157,16 +157,17 @@ if __name__=="__main__":
     leaky_topk_probe_sweep(sae_location, params_list)
  """
     
-    params_list = []
+    """ params_list = []
     for k_start in [1024, 512, 100]:
         for anneal_start in [0]:
             for k_end in [1, 2, 3]:
                 epsilon = 0
                 params_list.append((epsilon, k_start, anneal_start, k_end))
     k_annealing_probe_sweep(sae_location, params_list)
-
+ """
+    
     """ params_list = []
-    for coeff in [1, 10, 50]:
+    for coeff in [10, 20, 30]:
         for init in ["ones", "zeros", "random"]:
             params_list.append((coeff, init))
     L1_gated_probe_sweep(sae_location, params_list) """
