@@ -202,9 +202,9 @@ class L1_Sparse_Probe(LinearProbe):
     def forward(self, activations, targets):
         if self.normalize:
             normalized_weight = F.normalize(self.linear.weight, p=2, dim=1) #normalize rows, so that L1 term increases sparsity rather than just decreasing all weights
+            logits = activations @ normalized_weight.transpose(0, 1) + self.linear.bias
         else:
-            normalized_weight = self.linear.weight
-        logits = activations @ normalized_weight.transpose(0, 1) + self.linear.bias
+            logits = self.linear(activations)
         accuracy_loss = super().loss(logits, targets)
         sparsity_loss = torch.abs(normalized_weight).mean()
         loss = accuracy_loss + self.sparsity_coeff * sparsity_loss
@@ -218,8 +218,10 @@ class Without_Topk_Sparse_Probe(LinearProbe):
         self.k = k
 
     def forward(self, activations, targets):
-        normalized_weight = F.normalize(self.linear.weight, p=2, dim=1) #normalize rows, so that sparsity loss term increases sparsity rather than just decreasing all weights
-        logits = activations @ normalized_weight.transpose(0, 1) + self.linear.bias
+        #normalized_weight = F.normalize(self.linear.weight, p=2, dim=1) #normalize rows, so that sparsity loss term increases sparsity rather than just decreasing all weights
+        #logits = activations @ normalized_weight.transpose(0, 1) + self.linear.bias
+        normalized_weight = self.linear.weight #don't normalize?
+        logits = self.linear(activations) #don't normalize?
         accuracy_loss = super().loss(logits, targets)
         
         top_k_indices = torch.topk(torch.abs(normalized_weight), self.k, dim=1).indices
@@ -238,7 +240,8 @@ class Leaky_Topk_Probe(LinearProbe):
         self.epsilon = epsilon
 
     def forward(self, activations, targets):
-        normalized_weight = F.normalize(self.linear.weight, p=2, dim=1) #normalize rows, so that model can't just decrease all weights to epsilon or below
+        #normalized_weight = F.normalize(self.linear.weight, p=2, dim=1) #normalize rows, so that model can't just decrease all weights to epsilon or below
+        normalized_weight = self.linear.weight #don't normalize?
         kth_value = torch.topk(torch.abs(normalized_weight), k=self.k, dim=1).values.min(dim=1).values
         suppressed_weights = suppress_lower_activations(normalized_weight, kth_value, epsilon=self.epsilon, mode="absolute")
         logits = activations @ suppressed_weights.transpose(0, 1) + self.linear.bias
@@ -294,8 +297,10 @@ class L1_Gated_Probe(LinearProbe):
         self.bias = torch.nn.Parameter(torch.zeros(64, 3))
 
     def forward(self, activations, targets):
-        normalized_feature_choice = F.normalize(F.relu(self.feature_choice), p=2, dim=-1)
-        normalized_weight = F.normalize(self.weight, p=2, dim=-1)
+        #normalized_feature_choice = F.normalize(F.relu(self.feature_choice), p=2, dim=-1)
+        #normalized_weight = F.normalize(self.weight, p=2, dim=-1)
+        normalized_feature_choice = F.relu(self.feature_choice) #don't normalize?
+        normalized_weight = self.weight #don't normalize?
         activations_chosen = normalized_feature_choice * activations.unsqueeze(-2)
         logits = torch.einsum("ijk,...ik->...ij", normalized_weight, activations_chosen) + self.bias
 
