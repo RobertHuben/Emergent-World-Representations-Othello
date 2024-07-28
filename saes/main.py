@@ -139,7 +139,7 @@ if __name__=="__main__":
     probe_name = f"linear_probe_sae={sae_name}"
     train_probe(probe, probe_name, eval_after=True) """
 
-    params_list = [0, 0.01]
+    params_list = [1, 10, 50]
     L1_probe_sweep(sae_location, params_list)
 
 
