@@ -150,12 +150,12 @@ if __name__=="__main__":
     without_topk_probe_sweep(sae_location, params_list)
  """
 
-    """ params_list = []
+    params_list = []
     for k in [1, 2, 3]:
-        for epsilon in [0, 0.005, 0.01]:
+        for epsilon in [0.005, 0.01]:
             params_list.append((k, epsilon))
     leaky_topk_probe_sweep(sae_location, params_list)
- """
+
     
     """ params_list = []
     for k_start in [1024, 512, 100]:
@@ -166,12 +166,13 @@ if __name__=="__main__":
     k_annealing_probe_sweep(sae_location, params_list)
  """
     
-    params_list = []
+    """ params_list = []
     for coeff in [10, 20, 30]:
         for init in ["ones", "zeros", "random"]:
             params_list.append((coeff, init))
     L1_gated_probe_sweep(sae_location, params_list)
-
+ """
+    
     #test a constant probe
     """ sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
