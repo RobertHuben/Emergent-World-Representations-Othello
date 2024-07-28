@@ -203,7 +203,8 @@ class L1_Sparse_Probe(LinearProbe):
         if self.normalize:
             normalized_weight = F.normalize(self.linear.weight, p=2, dim=1) #normalize rows, so that L1 term increases sparsity rather than just decreasing all weights
             logits = activations @ normalized_weight.transpose(0, 1) + self.linear.bias
-        else:
+        else: #don't normalize?
+            normalized_weight = self.linear.weight
             logits = self.linear(activations)
         accuracy_loss = super().loss(logits, targets)
         sparsity_loss = torch.abs(normalized_weight).mean()
