@@ -139,16 +139,16 @@ if __name__=="__main__":
     probe_name = f"linear_probe_sae={sae_name}"
     train_probe(probe, probe_name, eval_after=True) """
 
-    params_list = [10, 20, 30]
+    """ params_list = [10, 20, 30]
     L1_probe_sweep(sae_location, params_list)
+ """
 
-
-    """ params_list = []
+    params_list = []
     for coeff in [1, 10, 20]:
         for k in [1, 2, 3]:
             params_list.append((k, coeff))
     without_topk_probe_sweep(sae_location, params_list)
- """
+
 
     """ params_list = []
     for k in [1, 2, 3]:
