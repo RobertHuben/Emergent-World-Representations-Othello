@@ -193,13 +193,17 @@ class Constant_Probe(LinearProbe):
         return loss, logits
 
 class L1_Sparse_Probe(LinearProbe):
-    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float):
+    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float, normalize=False):
         input_dim = model_to_probe.sae.num_features
         super().__init__(model_to_probe, input_dim)
         self.sparsity_coeff = sparsity_coeff
+        self.normalize = normalize
 
     def forward(self, activations, targets):
-        normalized_weight = F.normalize(self.linear.weight, p=2, dim=1) #normalize rows, so that L1 term increases sparsity rather than just decreasing all weights
+        if self.normalize:
+            normalized_weight = F.normalize(self.linear.weight, p=2, dim=1) #normalize rows, so that L1 term increases sparsity rather than just decreasing all weights
+        else:
+            normalized_weight = self.linear.weight
         logits = activations @ normalized_weight.transpose(0, 1) + self.linear.bias
         accuracy_loss = super().loss(logits, targets)
         sparsity_loss = torch.abs(normalized_weight).mean()
