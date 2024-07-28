@@ -250,8 +250,7 @@ class Leaky_Topk_Probe(LinearProbe):
     
 class K_Annealing_Probe(Leaky_Topk_Probe):
     def __init__(self, model_to_probe: SAEforProbing, epsilon: float, k_start: int, anneal_start: int, k_end: int):
-        input_dim = model_to_probe.sae.num_features
-        super().__init__(model_to_probe, input_dim, k_start, epsilon)
+        super().__init__(model_to_probe, k_start, epsilon)
         self.k_start = k_start
         self.anneal_start = anneal_start
         self.k_end = k_end
