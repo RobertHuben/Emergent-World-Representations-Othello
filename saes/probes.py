@@ -251,7 +251,7 @@ class Leaky_Topk_Probe(LinearProbe):
     
 class K_Annealing_Probe(Leaky_Topk_Probe):
     def __init__(self, model_to_probe: SAEforProbing, epsilon: float, k_start: int, before_anneal_proportion: float, k_end: int, after_anneal_proportion: float):
-        assert before_anneal_proportion + after_anneal_proportion > 1, "Negative time given for annealing!"
+        assert before_anneal_proportion + after_anneal_proportion <= 1, "Negative time given for annealing!"
         super().__init__(model_to_probe, k_start, epsilon)
         self.k_start = k_start
         self.before_anneal_proportion = before_anneal_proportion
