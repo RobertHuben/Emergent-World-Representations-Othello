@@ -250,28 +250,34 @@ class Leaky_Topk_Probe(LinearProbe):
         return loss, logits
     
 class K_Annealing_Probe(Leaky_Topk_Probe):
-    def __init__(self, model_to_probe: SAEforProbing, epsilon: float, k_start: int, anneal_start: int, k_end: int):
+    def __init__(self, model_to_probe: SAEforProbing, epsilon: float, k_start: int, before_anneal_proportion: float, k_end: int, after_anneal_proportion: float):
+        assert before_anneal_proportion + after_anneal_proportion > 1, "Negative time given for annealing!"
         super().__init__(model_to_probe, k_start, epsilon)
         self.k_start = k_start
-        self.anneal_start = anneal_start
+        self.before_anneal_proportion = before_anneal_proportion
         self.k_end = k_end
-        self.k_continuous = k_start
+        self.after_anneal_proportion = after_anneal_proportion
 
     def training_prep(self, train_dataset=None, batch_size=None, num_epochs=None):
         num_steps = len(train_dataset) * num_epochs / batch_size
-        #self.k_step = (self.k_start - self.k_end)/(num_steps - self.anneal_start)
+        self.before_anneal_steps = round(num_steps*self.before_anneal_proportion)
+        self.after_anneal_steps = round(num_steps*self.after_anneal_proportion)
+        self.anneal_steps = num_steps - self.before_anneal_steps - self.after_anneal_steps
         self.a = self.model_to_probe.sae.num_features - self.k_end + 0.5
-        self.b = math.log(0.5/self.a)/num_steps
+        self.b = math.log(0.5/self.a)/self.anneal_steps
         self.c = self.k_end - 0.5
         return
     
     def after_step_update(self, step=None):
-        """ if step >= self.anneal_start:
-            if step == self.anneal_start:
+        if step > self.before_anneal_steps:
+            if step == self.before_anneal_steps+1:
                 print("\nStarting annealing now.\n")
-            self.k_continuous -= self.k_step
-            self.k = round(self.k_continuous) """
-        self.k = round(self.a*math.exp(self.b*step) + self.c)
+            if step <= self.before_anneal_steps + self.anneal_steps:
+                self.k = round(self.a*math.exp(self.b*(step-self.before_anneal_steps)) + self.c)
+            else:
+                if step == self.before_anneal_steps + self.anneal_steps + 1:
+                    print("\nAnnealing finished.\n")
+                self.k = self.k_end
         return
     
 class L1_Gated_Probe(LinearProbe):

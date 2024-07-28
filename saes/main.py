@@ -103,10 +103,10 @@ def k_annealing_probe_sweep(sae_location:str, params_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
-    for (epsilon, k_start, anneal_start, k_end) in params_list:
-        probe_name = f"k_anneal_probe___sae={sae_name}___eps={epsilon}_kstart={k_start}_anneal={anneal_start}_kend={k_end}"
-        probe = K_Annealing_Probe(sae_to_probe, epsilon=epsilon, k_start=k_start, anneal_start=anneal_start, k_end=k_end)
+    training_params = TrainingParams(num_train_data=2000000)
+    for (epsilon, k_start, before_anneal_proportion, k_end, after_anneal_proportion) in params_list:
+        probe_name = f"k_anneal_probe___sae={sae_name}___eps={epsilon}_kstart={k_start}_before={before_anneal_proportion}_kend={k_end}_after={after_anneal_proportion}"
+        probe = K_Annealing_Probe(sae_to_probe, epsilon=epsilon, k_start=k_start, before_anneal_proportion=before_anneal_proportion, k_end=k_end, after_anneal_proportion=after_anneal_proportion)
         print(f"Training {probe_name}.\n")
         train_probe(probe, probe_name, train_params=training_params, eval_after=True)
 
@@ -150,23 +150,24 @@ if __name__=="__main__":
     without_topk_probe_sweep(sae_location, params_list)
  """
 
-    params_list = []
+    """ params_list = []
     for k in [1, 2, 3]:
         for epsilon in [0.005, 0.01]:
             if (k, epsilon) == (1, 0.005):
                 continue
             params_list.append((k, epsilon))
     leaky_topk_probe_sweep(sae_location, params_list)
-
-    
-    """ params_list = []
-    for k_start in [1024, 512, 100]:
-        for anneal_start in [0]:
-            for k_end in [1, 2, 3]:
-                epsilon = 0
-                params_list.append((epsilon, k_start, anneal_start, k_end))
-    k_annealing_probe_sweep(sae_location, params_list)
  """
+
+    params_list = []
+    for k_start in [1024]:
+        for before_anneal_proportion in [0, 0.1, 0.25]:
+            for k_end in [2, 3, 4]:
+                after_anneal_proportion = 0.5 - before_anneal_proportion
+                epsilon = 0
+                params_list.append((epsilon, k_start, before_anneal_proportion, k_end, after_anneal_proportion))
+    k_annealing_probe_sweep(sae_location, params_list)
+
     
     """ params_list = []
     for coeff in [10, 20, 30]:
