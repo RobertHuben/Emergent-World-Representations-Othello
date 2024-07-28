@@ -153,6 +153,8 @@ if __name__=="__main__":
     params_list = []
     for k in [1, 2, 3]:
         for epsilon in [0.005, 0.01]:
+            if (k, epsilon) == (1, 0.005):
+                continue
             params_list.append((k, epsilon))
     leaky_topk_probe_sweep(sae_location, params_list)
 
