@@ -70,7 +70,7 @@ def L1_probe_sweep(sae_location:str, sparsity_coeff_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=500000)
+    training_params = TrainingParams(num_train_data=1000000)
     for coeff in sparsity_coeff_list:
         probe_name = f"L1_probe___sae={sae_name}___coeff={coeff}"
         probe = L1_Sparse_Probe(sae_to_probe, sparsity_coeff=coeff)
@@ -81,7 +81,7 @@ def without_topk_probe_sweep(sae_location:str, params_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=500000)
+    training_params = TrainingParams(num_train_data=1000000)
     for (k, coeff) in params_list:
         probe_name = f"without_topk_probe___sae={sae_name}___k={k}_coeff={coeff}"
         probe = Without_Topk_Sparse_Probe(sae_to_probe, k=k, sparsity_coeff=coeff)
@@ -92,7 +92,7 @@ def leaky_topk_probe_sweep(sae_location:str, params_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=500000)
+    training_params = TrainingParams(num_train_data=1000000)
     for (k, epsilon) in params_list:
         probe_name = f"leaky_topk_probe___sae={sae_name}___k={k}_eps={epsilon}"
         probe = Leaky_Topk_Probe(sae_to_probe, k=k, epsilon=epsilon)
@@ -103,7 +103,7 @@ def k_annealing_probe_sweep(sae_location:str, params_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=500000)
+    training_params = TrainingParams(num_train_data=1000000)
     for (epsilon, k_start, anneal_start, k_end) in params_list:
         probe_name = f"k_anneal_probe___sae={sae_name}___eps={epsilon}_kstart={k_start}_anneal={anneal_start}_kend={k_end}"
         probe = K_Annealing_Probe(sae_to_probe, epsilon=epsilon, k_start=k_start, anneal_start=anneal_start, k_end=k_end)
@@ -114,7 +114,7 @@ def L1_gated_probe_sweep(sae_location:str, params_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=500000)
+    training_params = TrainingParams(num_train_data=1000000)
     for coeff, init in params_list:
         probe_name = f"gated_L1_probe___sae={sae_name}___coeff={coeff}_init={init}"
         probe = L1_Gated_Probe(sae_to_probe, sparsity_coeff=coeff, init_type=init)
@@ -139,24 +139,26 @@ if __name__=="__main__":
     probe_name = f"linear_probe_sae={sae_name}"
     train_probe(probe, probe_name, eval_after=True) """
 
-    params_list = [1, 10, 50]
+    """ params_list = [1, 10, 50]
     L1_probe_sweep(sae_location, params_list)
-
-
-    params_list = []
-    for coeff in [0, 0.01]:
-        for k in [2]:
-            params_list.append((k, coeff))
-    without_topk_probe_sweep(sae_location, params_list)
-
-    params_list = []
-    for k in [1024]:
-        epsilon = 0
-        params_list.append((k, epsilon))
-    leaky_topk_probe_sweep(sae_location, params_list)
+ """
 
     """ params_list = []
-    for k_start in [1024]:
+    for coeff in [1, 10, 50]:
+        for k in [1, 2, 3]:
+            params_list.append((k, coeff))
+    without_topk_probe_sweep(sae_location, params_list)
+ """
+
+    params_list = []
+    for k in [1, 2, 3]:
+        for epsilon in [0, 0.005, 0.01]:
+            params_list.append((k, epsilon))
+    leaky_topk_probe_sweep(sae_location, params_list)
+
+    
+    """ params_list = []
+    for k_start in [1024, 512, 100]:
         for anneal_start in [0]:
             for k_end in [1, 2, 3]:
                 epsilon = 0
@@ -164,8 +166,8 @@ if __name__=="__main__":
     k_annealing_probe_sweep(sae_location, params_list) """
 
     """ params_list = []
-    for coeff in [0, 0.01, 0.1]:
-        for init in ["random"]:
+    for coeff in [1, 10, 50]:
+        for init in ["ones", "zeros", "random"]:
             params_list.append((coeff, init))
     L1_gated_probe_sweep(sae_location, params_list) """
 
