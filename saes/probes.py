@@ -295,6 +295,7 @@ class Gated_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, init_type="ones"):
         Module.__init__(self)
         self.model_to_probe = model_to_probe
+        self.layer_to_probe = "hidden"
         self.num_data_trained_on=0
         self.accuracy = None
         self.accuracy_by_board_position = None
