@@ -143,12 +143,14 @@ if __name__=="__main__":
     #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     
-    """ sae = torch.load(sae_location, map_location=device)
-    probe = LinearProbe(model_to_probe=SAEforProbing(sae), input_dim=1024)
-    train_params=TrainingParams()
-    sae_name = sae_location.split('/')[-1][:-4]
-    probe_name = f"linear_probe_sae={sae_name}"
-    train_probe(probe, probe_name, eval_after=True) """
+    sae = torch.load(sae_location, map_location=device)
+    sae_to_probe = SAEforProbing(sae)
+    for (layer_to_probe, input_dim) in [("residual", 512), ("hidden", 1024), ("reconstruction", 512)]:
+        probe = LinearProbe(model_to_probe=sae_to_probe, input_dim=input_dim, layer_to_probe=layer_to_probe)
+        train_params=TrainingParams(2000000)
+        sae_name = sae_location.split('/')[-1][:-4]
+        probe_name = f"linear_probe_layer={layer_to_probe}_sae={sae_name}"
+        train_probe(probe, probe_name, eval_after=True)
 
     """ params_list = [10, 20, 30]
     L1_probe_sweep(sae_location, params_list)

@@ -47,14 +47,21 @@ class SAEforProbing(torch.nn.Module):
         self.sae = sae
         self.output_dim = sae.num_features
 
-    def forward(self, input):
-        loss, residual_stream, hidden_layer, reconstructed_residual_stream = self.sae.forward_on_tokens(input, compute_loss=False)
-        return hidden_layer
+    def forward(self, input, layer_to_probe="hidden"):
+        if layer_to_probe == "residual":
+            return self.sae.gpt(input)
+        else:
+            loss, residual_stream, hidden_layer, reconstructed_residual_stream = self.sae.forward_on_tokens(input, compute_loss=False)
+            if layer_to_probe == "hidden":
+                return hidden_layer
+            elif layer_to_probe == "reconstruction":
+                return reconstructed_residual_stream
 
 class LinearProbe(torch.nn.Module):
-    def __init__(self, model_to_probe:torch.nn.Module, input_dim:int):
+    def __init__(self, model_to_probe:torch.nn.Module, input_dim:int, layer_to_probe="hidden"):
         super().__init__()
         self.model_to_probe = model_to_probe
+        self.layer_to_probe = layer_to_probe
         self.linear = torch.nn.Linear(input_dim, 64*3)
         self.num_data_trained_on=0
         self.accuracy = None
@@ -64,9 +71,12 @@ class LinearProbe(torch.nn.Module):
             param.requires_grad=False
 
     def forward_on_tokens(self, token_sequences, targets=None):
-        activations = self.model_to_probe(token_sequences)
         if isinstance(self.model_to_probe, SAEforProbing):
-            targets = self.model_to_probe.sae.trim_to_window(targets)
+            activations = self.model_to_probe(token_sequences, self.layer_to_probe)
+            if self.layer_to_probe != "residual":
+                targets = self.model_to_probe.sae.trim_to_window(targets)
+        else:
+            activations = self.model_to_probe(token_sequences)
         loss, logits = self.forward(activations, targets)
         logits = logits.view((logits.shape[0], logits.shape[1], 64, 3))
         return loss, logits, targets
