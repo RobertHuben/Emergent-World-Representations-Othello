@@ -147,7 +147,7 @@ if __name__=="__main__":
     sae_to_probe = SAEforProbing(sae)
     for (layer_to_probe, input_dim) in [("residual", 512), ("hidden", 1024), ("reconstruction", 512)]:
         probe = LinearProbe(model_to_probe=sae_to_probe, input_dim=input_dim, layer_to_probe=layer_to_probe)
-        train_params=TrainingParams(2000000)
+        train_params=TrainingParams(num_train_data=2000000)
         sae_name = sae_location.split('/')[-1][:-4]
         probe_name = f"linear_probe_layer={layer_to_probe}_sae={sae_name}"
         train_probe(probe, probe_name, eval_after=True)
