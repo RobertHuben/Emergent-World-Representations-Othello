@@ -370,9 +370,9 @@ class K_Annealing_Gated_Probe(Gated_Probe, K_Annealing_Probe):
         self.k_end = k_end
         self.after_anneal_proportion = after_anneal_proportion
 
-    def feature_choice_activation(self):
+    def feature_choice_activation(self): #todo: try sigmoid
         kth_value = torch.topk(F.relu(self.feature_choice), k=self.k, dim=1).values.min(dim=1).values
-        return suppress_lower_activations(self.feature_choice, kth_value, epsilon=self.epsilon, mode="absolute")
+        return suppress_lower_activations(F.relu(self.feature_choice), kth_value, epsilon=self.epsilon, mode="absolute")
 
     def sparsity_loss(self, activated_feature_choice):
         return 0.0
