@@ -172,7 +172,7 @@ if __name__=="__main__":
     leaky_topk_probe_sweep(sae_location, params_list)
  """
 
-    params_list = []
+    """ params_list = []
     for k_start in [1024]:
         for before_anneal_proportion in [0.25]:
             for k_end in [1, 2, 3, 4, 5, 6]:
@@ -180,7 +180,7 @@ if __name__=="__main__":
                 epsilon = 0
                 params_list.append((epsilon, k_start, before_anneal_proportion, k_end, after_anneal_proportion))
     gated_k_annealing_probe_sweep(sae_location, params_list)
-
+ """
     
     """ params_list = []
     for coeff in [10, 20, 30]:
