@@ -150,7 +150,7 @@ if __name__=="__main__":
         train_params=TrainingParams(num_train_data=2000000)
         sae_name = sae_location.split('/')[-1][:-4]
         probe_name = f"linear_probe_layer={layer_to_probe}_sae={sae_name}"
-        train_probe(probe, probe_name, eval_after=True)
+        train_probe(probe, probe_name, train_params=train_params, eval_after=True)
 
     """ params_list = [10, 20, 30]
     L1_probe_sweep(sae_location, params_list)
