@@ -4,6 +4,7 @@ import os
 from torch.nn.modules import Module
 sys.path.append(os.path.join( os.path.dirname ( __file__), os.path.pardir))
 
+from abc import abstractmethod
 import torch
 from torch.nn import functional as F
 import numpy as np
@@ -280,11 +281,10 @@ class K_Annealing_Probe(Leaky_Topk_Probe):
                 self.k = self.k_end
         return
     
-class L1_Gated_Probe(LinearProbe):
-    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float, init_type="ones"):
+class Gated_Probe(LinearProbe):
+    def __init__(self, model_to_probe: SAEforProbing, init_type="ones"):
         Module.__init__(self)
         self.model_to_probe = model_to_probe
-        self.sparsity_coeff = sparsity_coeff
         self.num_data_trained_on=0
         self.accuracy = None
         self.accuracy_by_board_position = None
@@ -303,30 +303,34 @@ class L1_Gated_Probe(LinearProbe):
         self.bias = torch.nn.Parameter(torch.zeros(64, 3))
 
     def forward(self, activations, targets):
-        #normalized_feature_choice = F.normalize(F.relu(self.feature_choice), p=2, dim=-1)
-        #normalized_weight = F.normalize(self.weight, p=2, dim=-1)
-        normalized_feature_choice = F.relu(self.feature_choice) #don't normalize?
-        normalized_weight = self.weight #don't normalize?
-        activations_chosen = normalized_feature_choice * activations.unsqueeze(-2)
-        logits = torch.einsum("ijk,...ik->...ij", normalized_weight, activations_chosen) + self.bias
+        activated_feature_choice = self.feature_choice_activation()
+        activations_chosen = activated_feature_choice * activations.unsqueeze(-2)
+        logits = torch.einsum("ijk,...ik->...ij", self.weight, activations_chosen) + self.bias
 
-        sparsity_loss = normalized_feature_choice.mean() #note that all elements of normalized_feature_choice are already non-negative
+        sparsity_loss = self.sparsity_loss(activated_feature_choice)
         accuracy_loss = super().loss(logits, targets)
-        loss = accuracy_loss + self.sparsity_coeff*sparsity_loss
+        loss = accuracy_loss + sparsity_loss
         return loss, logits
+    
+    @abstractmethod
+    def feature_choice_activation(self):
+        pass
+    
+    @abstractmethod
+    def sparsity_loss(self, activated_feature_choice):
+        pass
 
     def after_training_eval(self, eval_dataset:ProbeDataset, save_location:str):
         if not isinstance(eval_dataset, ProbeDataset):
             eval_dataset = ProbeDataset(eval_dataset)
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         self.compute_accuracy(logits, targets)
-        normalized_feature_choice = F.normalize(F.relu(self.feature_choice), p=2, dim=-1)
-        normalized_weight = F.normalize(self.weight, p=2, dim=-1)
-        combined_weights = normalized_feature_choice.unsqueeze(-2) * normalized_weight
+        activated_feature_choice = self.feature_choice_activation()
+        combined_weights = activated_feature_choice.unsqueeze(-2) * self.weight
         top4_features = torch.topk(torch.abs(combined_weights), k=4, dim=-1).indices
         top4_weights = combined_weights.gather(-1, top4_features)
-        top4_feature_choices = torch.topk(torch.abs(normalized_feature_choice), k=4, dim=-1).indices
-        top4_feature_choice_weights = normalized_feature_choice.gather(-1, top4_feature_choices)
+        top4_feature_choices = torch.topk(torch.abs(activated_feature_choice), k=4, dim=-1).indices
+        top4_feature_choice_weights = activated_feature_choice.gather(-1, top4_feature_choices)
         with open(save_location, 'a') as f:
             f.write(f"Average accuracy: {self.accuracy}\n")
             f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
@@ -334,3 +338,31 @@ class L1_Gated_Probe(LinearProbe):
             f.write(f"\nTop 4 weights by board position and class:\n{top4_weights.reshape((8, 8, 3, 4))}\n")
             f.write(f"\nTop 4 features choices by board position:\n{top4_feature_choices.reshape((8, 8, 4))}\n")
             f.write(f"\nTop 4 chosen weights by board position:\n{top4_feature_choice_weights.reshape((8, 8, 4))}")
+
+class L1_Gated_Probe(Gated_Probe):
+    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float, init_type="ones"):
+        super().__init__(model_to_probe, init_type)
+        self.sparsity_coeff = sparsity_coeff
+
+    def feature_choice_activation(self):
+        return F.relu(self.feature_choice)
+    
+    def sparsity_loss(self, activated_feature_choice):
+        return self.sparsity_coeff * activated_feature_choice.mean() #note that all elements of activated_feature_choice are already non-negative
+
+class K_Annealing_Gated_Probe(Gated_Probe, K_Annealing_Probe):
+    def __init__(self, model_to_probe: SAEforProbing, epsilon: float, k_start: int, before_anneal_proportion: float, k_end: int, after_anneal_proportion: float, init_type="ones"):
+        super().__init__(model_to_probe, init_type)
+        self.epsilon = epsilon
+        self.k = k_start
+        self.k_start = k_start
+        self.before_anneal_proportion = before_anneal_proportion
+        self.k_end = k_end
+        self.after_anneal_proportion = after_anneal_proportion
+
+    def feature_choice_activation(self):
+        kth_value = torch.topk(F.relu(self.feature_choice), k=self.k, dim=1).values.min(dim=1).values
+        return suppress_lower_activations(self.feature_choice, kth_value, epsilon=self.epsilon, mode="absolute")
+
+    def sparsity_loss(self, activated_feature_choice):
+        return 0.0

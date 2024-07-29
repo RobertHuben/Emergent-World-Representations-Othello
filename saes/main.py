@@ -10,7 +10,7 @@ from saes.architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae, test_train_params, train_probe
-from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, L1_Gated_Probe, Constant_Probe, SAEforProbing
+from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, L1_Gated_Probe, K_Annealing_Gated_Probe, Constant_Probe, SAEforProbing
 from train import TrainingParams
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
@@ -121,6 +121,17 @@ def L1_gated_probe_sweep(sae_location:str, params_list:list):
         print(f"Training {probe_name}.\n")
         train_probe(probe, probe_name, train_params=training_params, eval_after=True)
 
+def gated_k_annealing_probe_sweep(sae_location:str, params_list:list):
+    sae = torch.load(sae_location, map_location=device)
+    sae_name = sae_location.split('/')[-1][:-4]
+    sae_to_probe = SAEforProbing(sae)
+    training_params = TrainingParams(num_train_data=2000000)
+    for (epsilon, k_start, before_anneal_proportion, k_end, after_anneal_proportion) in params_list:
+        probe_name = f"gated_k_anneal_probe___sae={sae_name}___eps={epsilon}_kstart={k_start}_before={before_anneal_proportion}_kend={k_end}_after={after_anneal_proportion}"
+        probe = K_Annealing_Gated_Probe(sae_to_probe, epsilon=epsilon, k_start=k_start, before_anneal_proportion=before_anneal_proportion, k_end=k_end, after_anneal_proportion=after_anneal_proportion)
+        print(f"Training {probe_name}.\n")
+        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
+
 
 if __name__=="__main__":
 
@@ -129,8 +140,8 @@ if __name__=="__main__":
     #leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005], mode_list=["absolute"])
     #gated_training_sweep([60, 100, 120, 150], ["standard"])
 
-    #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
-    sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
+    sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
+    #sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     
     """ sae = torch.load(sae_location, map_location=device)
     probe = LinearProbe(model_to_probe=SAEforProbing(sae), input_dim=1024)
@@ -161,12 +172,12 @@ if __name__=="__main__":
 
     params_list = []
     for k_start in [1024]:
-        for before_anneal_proportion in [0, 0.1, 0.25]:
-            for k_end in [2, 3, 4]:
+        for before_anneal_proportion in [0.25]:
+            for k_end in [1, 2, 3, 4, 5, 6]:
                 after_anneal_proportion = 0.5 - before_anneal_proportion
                 epsilon = 0
                 params_list.append((epsilon, k_start, before_anneal_proportion, k_end, after_anneal_proportion))
-    k_annealing_probe_sweep(sae_location, params_list)
+    gated_k_annealing_probe_sweep(sae_location, params_list)
 
     
     """ params_list = []
