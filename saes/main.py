@@ -5,8 +5,8 @@ sys.path.append(os.path.join( os.path.dirname ( __file__), os.path.pardir))
 import torch 
 from tqdm import tqdm
 
-from saes.sae_template import SAEPretrainedProbes
-from saes.architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE
+from sae_template import SAEPretrainedProbes
+from architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae, test_train_params, train_probe
