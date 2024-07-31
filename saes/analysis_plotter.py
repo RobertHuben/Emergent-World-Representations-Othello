@@ -9,6 +9,7 @@ import re
 
 from utils import load_datasets_automatic
 from board_states import get_board_states
+from probes import Gated_Probe
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -118,6 +119,36 @@ def plot_feature_activations(sae, feature_number, board_position, dataset, separ
     plt.legend()
     save_file_name=f"analysis_results/hist_contents_feat_{feature_number}_pos_{board_position}.png"
     fig.savefig(save_file_name)
+
+#Creates a folder of 64 plots (one per board position) at save_location
+def plot_top_2_features_per_board_position(probe_location: str, save_location: str):
+    dataset, _ = load_datasets_automatic(1000, 1)
+    probe = torch.load(probe_location, map_location=device)
+    probe_name = probe_location.split("/")[-1][:-4]
+    save_dir = f"{save_location}/{probe_name}_top_2_feature_plots"
+    os.makedirs(save_dir, exist_ok=True)
+    residual_streams, hidden_layers, reconstructed_residual_streams=probe.model_to_probe.sae.catenate_outputs_on_dataset(dataset, batch_size=8, include_loss=False)
+    top_2_features = torch.topk(probe.feature_choice, k=2, dim=-1).indices
+    board_states= get_board_states(dataset)
+    board_states=probe.model_to_probe.sae.trim_to_window(board_states)
+    class_names=np.array(["Enemy", "Empty", "Own"])
+    for board_position in range(64):
+        first_feature_index = top_2_features[board_position, 0]
+        second_feature_index = top_2_features[board_position, 1]
+        first_feature_activations = hidden_layers[:,:, first_feature_index].flatten().detach().numpy()
+        second_feature_activations = hidden_layers[:,:, second_feature_index].flatten().detach().numpy()
+        labels=board_states[:,:, board_position].flatten()
+
+        scatter = plt.scatter(x=first_feature_activations, y=second_feature_activations, s=5, c=labels)
+        handles, labels = scatter.legend_elements(prop="colors", alpha=0.6)
+        plt.legend(handles, class_names, loc="upper right", title=f"Position {board_position} contents")
+        plt.xlabel(f"First Feature (#{first_feature_index}) Activation")
+        plt.ylabel(f"Second Feature (#{second_feature_index}) Activation")
+        plt.title(f'Activations of top 2 features for predicting board position {board_position} contents')
+        
+        save_file_name=f"position_{board_position}.png"
+        plt.savefig(f"{save_dir}/{save_file_name}")
+        plt.close()
 
 def show_best_feature(sae, position_index, piece_class):
     feature_to_use=sae.classifier_smds.max(dim=0).indices[position_index][piece_class]
