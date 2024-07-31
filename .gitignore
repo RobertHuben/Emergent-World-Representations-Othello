@@ -8,3 +8,5 @@ test.py
 trained_models/*
 trained_probes/*
 analysis_results/*
+saes/deprecated/*
+saes/test_methods/*
