@@ -44,10 +44,11 @@ class SAETemplate(torch.nn.Module, ABC):
         decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
         decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=1).unsqueeze(-1) # columns of norm 1
         decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
-        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
-        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
-        self.decoder=torch.nn.Parameter(decoder_initial_value)
-        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
+        encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
+        encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
+        decoder=torch.nn.Parameter(decoder_initial_value)
+        decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
+        return encoder, encoder_bias, decoder, decoder_bias
 
     def trim_to_window(self, input, offset=0):
         '''
