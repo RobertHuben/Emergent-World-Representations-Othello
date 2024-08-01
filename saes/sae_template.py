@@ -183,9 +183,9 @@ class SAETemplate(torch.nn.Module, ABC):
         information.extend(self.report_model_specific_features())
         information.extend([f"Classifications:",
                             f"    Number of SMD>2 classifiers (None=not evaluated): {self.num_classifier_above_threshold(metric_name='classifier_smds', threshold=2)}",
-                            f"    Average classifer SMD (None=not evaluated): {self.average_classifier_score(metric_name='classifier_smds')}",
+                            f"    Average classifier SMD (None=not evaluated): {self.average_classifier_score(metric_name='classifier_smds')}",
                             f"    Number of AUROC>.9 classifiers (None=not evaluated): {self.num_classifier_above_threshold()}",
-                            f"    Average classifer AUROC (None=not evaluated): {self.average_classifier_score()}",
+                            f"    Average classifier AUROC (None=not evaluated): {self.average_classifier_score()}",
                             ])
         if eval_dataset:
             losses, residual_streams, hidden_layers, reconstructed_residual_streams=self.catenate_outputs_on_dataset(eval_dataset, include_loss=True)
