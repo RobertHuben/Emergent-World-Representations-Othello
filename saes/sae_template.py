@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torcheval.metrics import BinaryAUROC
+import copy
 
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
 from EWOthello.mingpt.probe_model import BatteryProbeClassification
@@ -177,7 +178,7 @@ class SAETemplate(torch.nn.Module, ABC):
         '''
         information=[f"Model type: {type(self)}", 
                      f"Number of features: {self.num_features}", 
-                     f"Number of parameters: {sum([param.numel() for param in self.parameters()])}", 
+                     f"Number of parameters: {sum([param.numel() for param in self.parameters() if param.requires_grad])}", 
                      f"Number of games trained on: {self.num_data_trained_on}"]
         information.extend(self.report_model_specific_features())
         information.extend([f"Classifications:",
@@ -315,6 +316,19 @@ class SAETemplate(torch.nn.Module, ABC):
         best_scores=metric.max(dim=0).values
         return float(torch.mean(best_scores))
     
+    def create_feature_subset_SAE(self, new_feature_indices):
+        new_sae=copy.deepcopy(self)
+        new_sae.num_features=len(new_feature_indices)
+        new_sae.classifier_aurocs=None #reset metric
+        new_sae.classifier_smds=None #reset metric
+        try:
+            new_sae.encoder=torch.nn.Parameter(self.encoder[:,new_feature_indices])
+            new_sae.decoder=torch.nn.Parameter(self.decoder[new_feature_indices])
+            new_sae.encoder_bias=torch.nn.Parameter(self.encoder_bias[new_feature_indices])
+        except AttributeError:
+            pass
+        return new_sae
+
 class SAEPretrainedProbes(SAETemplate):
     def __init__(self, gpt: GPTforProbing, probe_layer: int, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, window_start_trim, window_end_trim)
