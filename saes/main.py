@@ -81,7 +81,7 @@ def L1_choice_probe_sweep(sae_location:str, params_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
+    training_params = TrainingParams(num_train_data=2000000)
     for (coeff, proportion) in params_list:
         probe_name = f"L1_choice_probe___sae={sae_name}___coeff={coeff}_prop={proportion}"
         probe = L1_Choice_Probe(sae_to_probe, sparsity_coeff=coeff, sparsity_loss_training_proportion=proportion)
