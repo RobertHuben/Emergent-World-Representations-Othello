@@ -233,6 +233,7 @@ class L1_Choice_Probe(L1_Sparse_Probe):
         if step == self.sparsity_loss_steps:
             self.sparsity_loss = False
             self.above_mask = self.linear.weight >= self.weight_bound
+            print("\nFeatures chosen.  Now training without sparsity loss.\n")
     
     def forward(self, activations, targets):
         if self.sparsity_loss:
