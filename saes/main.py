@@ -151,8 +151,8 @@ if __name__=="__main__":
     #leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005], mode_list=["absolute"])
     #gated_training_sweep([60, 100, 120, 150], ["standard"])
 
-    sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
-    #sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
+    #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
+    sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     
     """ sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
