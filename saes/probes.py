@@ -179,14 +179,16 @@ class LinearProbe(torch.nn.Module):
         print_message=f"Train loss, test loss, accuracy after {self.num_data_trained_on} training games: {train_loss.item():.2f}, {test_loss:.3f}, {self.accuracy:.4f}"
         tqdm.write(print_message)
 
-    def after_training_eval(self, eval_dataset:ProbeDataset, save_location:str):
+    def after_training_eval(self, eval_dataset:ProbeDataset, save_location:str, weight=None):
+        if weight == None:
+            weight = self.linear.weight
         if not isinstance(eval_dataset, ProbeDataset):
             eval_dataset = ProbeDataset(eval_dataset)
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         self.compute_accuracy(logits, targets)
-        abs_weights = torch.abs(self.linear.weight)
+        abs_weights = torch.abs(weight)
         top4_features = torch.topk(abs_weights, k=4, dim=1).indices
-        top4_weights = self.linear.weight.gather(1, top4_features)
+        top4_weights = weight.gather(1, top4_features)
         with open(save_location, 'a') as f:
             f.write(f"Average accuracy: {self.accuracy}\n")
             f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
@@ -204,23 +206,47 @@ class Constant_Probe(LinearProbe):
         return loss, logits
 
 class L1_Sparse_Probe(LinearProbe):
-    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float, normalize=False):
+    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float):
         input_dim = model_to_probe.sae.num_features
         super().__init__(model_to_probe, input_dim)
         self.sparsity_coeff = sparsity_coeff
-        self.normalize = normalize
 
     def forward(self, activations, targets):
-        if self.normalize:
-            normalized_weight = F.normalize(self.linear.weight, p=2, dim=1) #normalize rows, so that L1 term increases sparsity rather than just decreasing all weights
-            logits = activations @ normalized_weight.transpose(0, 1) + self.linear.bias
-        else: #don't normalize?
-            normalized_weight = self.linear.weight
-            logits = self.linear(activations)
+        logits = self.linear(activations)
         accuracy_loss = super().loss(logits, targets)
-        sparsity_loss = torch.abs(normalized_weight).mean()
+        sparsity_loss = torch.abs(self.linear.weight).mean()
         loss = accuracy_loss + self.sparsity_coeff * sparsity_loss
         return loss, logits
+    
+class L1_Choice_Probe(L1_Sparse_Probe):
+    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float, sparsity_loss_training_proportion: float, weight_bound=0.01):
+        super().__init__(model_to_probe, sparsity_coeff)
+        self.sparsity_loss_training_proportion = sparsity_loss_training_proportion
+        self.weight_bound = weight_bound
+
+    def training_prep(self, train_dataset=None, batch_size=None, num_epochs=None):
+        num_steps = len(train_dataset) * num_epochs / batch_size
+        self.sparsity_loss_steps = round(num_steps*self.sparsity_loss_training_proportion)
+        self.sparsity_loss = True
+
+    def after_step_update(self, step=None):
+        if step == self.sparsity_loss_steps:
+            self.sparsity_loss = False
+            self.above_mask = self.linear.weight >= self.weight_bound
+    
+    def forward(self, activations, targets):
+        if self.sparsity_loss:
+            logits = self.linear(activations)
+            sparsity_loss = torch.abs(self.linear.weight).mean()
+        else:
+            logits = activations @ (self.linear.weight*self.above_mask).transpose(0, 1) + self.linear.bias
+            sparsity_loss = 0.0
+        accuracy_loss = super().loss(logits, targets)
+        loss = accuracy_loss + self.sparsity_coeff * sparsity_loss
+        return loss, logits
+    
+    def after_training_eval(self, eval_dataset: ProbeDataset, save_location: str):
+        super().after_training_eval(eval_dataset, save_location, weight=self.linear.weight*self.above_mask)
     
 class Without_Topk_Sparse_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, k: int, sparsity_coeff: float):

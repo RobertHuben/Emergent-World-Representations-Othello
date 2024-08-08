@@ -148,6 +148,35 @@ def plot_top_2_features_per_board_position(probe_location: str, save_location: s
         plt.savefig(f"{save_dir}/{save_file_name}")
         plt.close()
 
+def plot_top_3_features_per_board_position(probe_location: str, board_position: int):
+    dataset, _ = load_datasets_automatic(104, 1)
+    probe = torch.load(probe_location, map_location=device)
+    residual_streams, hidden_layers, reconstructed_residual_streams=probe.model_to_probe.sae.catenate_outputs_on_dataset(dataset, batch_size=8, include_loss=False)
+    top_3_features = torch.topk(probe.feature_choice, k=3, dim=-1).indices
+    board_states= get_board_states(dataset)
+    board_states=probe.model_to_probe.sae.trim_to_window(board_states)
+    class_names=np.array(["Enemy", "Empty", "Own"])
+
+    first_feature_index = top_3_features[board_position, 0]
+    second_feature_index = top_3_features[board_position, 1]
+    third_feature_index = top_3_features[board_position, 2]
+    first_feature_activations = hidden_layers[:,:, first_feature_index].flatten().detach().numpy()
+    second_feature_activations = hidden_layers[:,:, second_feature_index].flatten().detach().numpy()
+    third_feature_activations = hidden_layers[:,:, third_feature_index].flatten().detach().numpy()
+    labels=board_states[:,:, board_position].flatten()
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    scatter = ax.scatter(xs=first_feature_activations, ys=second_feature_activations, zs=third_feature_activations, s=5, c=labels)
+    handles, labels = scatter.legend_elements(prop="colors", alpha=0.6)
+    ax.legend(handles, class_names, loc="upper right", title=f"Position {board_position} contents")
+    ax.set_xlabel(f"First Feature (#{first_feature_index}) Activation")
+    ax.set_ylabel(f"Second Feature (#{second_feature_index}) Activation")
+    ax.set_zlabel(f"Third Feature (#{third_feature_index}) Activation")
+    ax.set_title(f'Activations of top 3 features for predicting board position {board_position} contents')
+    
+    plt.show()
+
 def show_best_feature(sae, position_index, piece_class):
     feature_to_use=sae.classifier_smds.max(dim=0).indices[position_index][piece_class]
     _, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
