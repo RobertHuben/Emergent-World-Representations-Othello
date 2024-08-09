@@ -164,7 +164,7 @@ if __name__=="__main__":
         train_probe(probe, probe_name, train_params=train_params, eval_after=True)
  """
     
-    params_list = [10, 20, 30]
+    params_list = [30]
     L1_probe_sweep(sae_location, params_list)
 
     
