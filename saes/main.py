@@ -164,13 +164,14 @@ if __name__=="__main__":
         train_probe(probe, probe_name, train_params=train_params, eval_after=True)
  """
     
-    """ params_list = [10, 20, 30]
+    params_list = [10, 20, 30]
     L1_probe_sweep(sae_location, params_list)
+
+    
+    """ params_list = [(4, 0.5), (8, 0.5), (16, 0.5)]
+    L1_choice_probe_sweep(sae_location, params_list)
  """
     
-    params_list = [(4, 0.5), (8, 0.5), (16, 0.5)]
-    L1_choice_probe_sweep(sae_location, params_list)
-
     """ params_list = []
     for coeff in [1, 10, 20]:
         for k in [1, 2, 3]:
