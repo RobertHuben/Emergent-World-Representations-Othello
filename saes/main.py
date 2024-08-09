@@ -168,7 +168,7 @@ if __name__=="__main__":
     L1_probe_sweep(sae_location, params_list)
  """
     
-    params_list = [(0.5, 0.5), (1, 0.5), (2, 0.5), (4, 0.5), (8, 0.5), (16, 0.5)]
+    params_list = [(4, 0.5), (8, 0.5), (16, 0.5)]
     L1_choice_probe_sweep(sae_location, params_list)
 
     """ params_list = []

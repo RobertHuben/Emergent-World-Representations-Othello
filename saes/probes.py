@@ -246,8 +246,8 @@ class L1_Choice_Probe(L1_Sparse_Probe):
         loss = accuracy_loss + self.sparsity_coeff * sparsity_loss
         return loss, logits
     
-    def after_training_eval(self, eval_dataset: ProbeDataset, save_location: str):
-        super().after_training_eval(eval_dataset, save_location, weight=self.linear.weight*self.above_mask)
+    """ def after_training_eval(self, eval_dataset: ProbeDataset, save_location: str):
+        super().after_training_eval(eval_dataset, save_location, weight=self.linear.weight*self.above_mask) """
     
 class Without_Topk_Sparse_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, k: int, sparsity_coeff: float):
