@@ -318,6 +318,65 @@ class K_Annealing_Probe(Leaky_Topk_Probe):
                 self.k = self.k_end
         return
     
+class Pre_Chosen_Features_Gated_Probe(LinearProbe):
+    #chosen_features_list is a list containing 64 lists containing feature indices
+    def __init__(self, model_to_probe: SAEforProbing, chosen_features_list: list):
+        Module.__init__(self)
+        self.model_to_probe = model_to_probe
+        self.layer_to_probe = "hidden"
+        self.num_data_trained_on=0
+        self.accuracy = None
+        self.accuracy_by_board_position = None
+
+        for param in model_to_probe.parameters():
+            param.requires_grad=False
+
+        num_features = self.model_to_probe.sae.num_features
+
+        max_features_per_position = max([len(feature_indices) for feature_indices in chosen_features_list])
+        features_to_use_mask = torch.ones(64, 1, max_features_per_position)
+
+        for position, feature_indices in enumerate(chosen_features_list):
+            num_unique_indices = len(feature_indices)
+            for i in range(max_features_per_position - len(feature_indices)):
+                feature_indices.append(feature_indices[0])
+                index = i + num_unique_indices
+                features_to_use_mask[position, 0, index] = 0 #test that this does the right thing
+        self.indices = torch.Tensor(chosen_features_list).int()
+
+        self.weight = torch.nn.Parameter(torch.randn((64, 3, max_features_per_position)) * features_to_use_mask)
+        self.bias = torch.nn.Parameter(torch.zeros(64, 3))
+
+    def forward(self, activations, targets):
+        chosen_activations = activations[:, :, self.indices] #test that this does the right thing
+        #test
+        """ for batch in range(activations.shape[0]):
+            for move in range(activations.shape[1]):
+                for position in range(64):
+                    for index in range(self.weight.shape[-1]):
+                        assert torch.Tensor.isclose(chosen_activations[batch, move, position, index], activations[batch, move, self.indices[position, index]]) """
+        logits = torch.einsum("ijk,...ik->...ij", self.weight, chosen_activations) + self.bias #test that this does the right thing
+        #test
+        """ for batch in range(activations.shape[0]):
+            for move in range(activations.shape[1]):
+                for position in range(64):
+                    for clas in range(3):
+                        assert torch.abs(logits[batch, move, position, clas] - torch.sum(self.weight[position, clas] * chosen_activations[batch, move, position])) < 0.001 """
+        loss = super().loss(logits, targets)
+        return loss, logits
+    
+    def after_training_eval(self, eval_dataset:ProbeDataset, save_location:str):
+        if not isinstance(eval_dataset, ProbeDataset):
+            eval_dataset = ProbeDataset(eval_dataset)
+        losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
+        self.compute_accuracy(logits, targets)
+        with open(save_location, 'a') as f:
+            f.write(f"Average accuracy: {self.accuracy}\n")
+            f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
+            f.write(f"\nFeatures used by each board position:\n{self.indices.reshape((8, 8, -1))}\n")
+            f.write(f"\nWeights by board position and class:\n{self.weight.reshape((8, 8, 3, -1))}")
+
+
 class Gated_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, init_type="ones"):
         Module.__init__(self)

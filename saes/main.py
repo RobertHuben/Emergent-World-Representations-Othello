@@ -10,7 +10,7 @@ from architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae, test_train_params, train_probe
-from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, L1_Choice_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, L1_Gated_Probe, K_Annealing_Gated_Probe, Constant_Probe, SAEforProbing
+from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, L1_Choice_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, Pre_Chosen_Features_Gated_Probe, L1_Gated_Probe, K_Annealing_Gated_Probe, Constant_Probe, SAEforProbing
 from train import TrainingParams
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
@@ -143,6 +143,24 @@ def gated_k_annealing_probe_sweep(sae_location:str, params_list:list):
         print(f"Training {probe_name}.\n")
         train_probe(probe, probe_name, train_params=training_params, eval_after=True)
 
+def pre_chosen_gated_probe_from_L1_probe(sae_location:str, L1_probe_location:str, new_probe_name="pre_chosen_gated_probe", bound_factor=0.01):
+    sae = torch.load(sae_location, map_location=device)
+    sae_to_probe = SAEforProbing(sae)
+
+    L1_probe = torch.load(L1_probe_location, map_location=device)
+    chosen_features_list = []
+    sparse_weights = L1_probe.linear.weight.reshape(64, 3, -1)
+    for position in range(64):
+        max_weight = torch.max(sparse_weights[position])
+        max_feature_weights = sparse_weights[position].max(dim=0).values
+        feature_indices = torch.nonzero(max_feature_weights >= (max_weight * bound_factor))
+        chosen_features_list.append(feature_indices.flatten().tolist())
+
+    training_params = TrainingParams(num_train_data=2000000)
+    probe = Pre_Chosen_Features_Gated_Probe(sae_to_probe, chosen_features_list)
+    train_probe(probe, new_probe_name, train_params=training_params, eval_after=True)
+
+
 
 if __name__=="__main__":
 
@@ -164,8 +182,8 @@ if __name__=="__main__":
         train_probe(probe, probe_name, train_params=train_params, eval_after=True)
  """
     
-    params_list = [30]
-    L1_probe_sweep(sae_location, params_list)
+    """ params_list = [30]
+    L1_probe_sweep(sae_location, params_list) """
 
     
     """ params_list = [(4, 0.5), (8, 0.5), (16, 0.5)]
@@ -211,3 +229,7 @@ if __name__=="__main__":
     training_params = TrainingParams(num_train_data=500000)
     probe = Constant_Probe(sae_to_probe, input_dim=1024)
     train_probe(probe, "constant_probe", train_params=training_params, eval_after=True) """
+
+    #L1_probe_location = "trained_probes/08_09_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff=30.pkl"
+    L1_probe_location = "08_09_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff=30.pkl"
+    pre_chosen_gated_probe_from_L1_probe(sae_location, L1_probe_location, "pre_chosen_gated_probe_sae=gated_probe=L1_coeff=30")
