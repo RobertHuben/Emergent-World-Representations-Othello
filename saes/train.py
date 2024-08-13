@@ -1,7 +1,7 @@
 import torch
 from typing import Union
 from sae_template import SAETemplate
-from probes import LinearProbe, ProbeDataset
+from probes import LinearProbe, ProbeDataset, SAEforProbing, L1_Sparse_Probe, Pre_Chosen_Features_Gated_Probe
 from EWOthello.mingpt.model import GPTforProbing
 from utils import load_datasets_automatic
 from datetime import datetime
@@ -48,7 +48,6 @@ def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingPara
 
 def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=default_train_params, save_dir="trained_probes", eval_after=False):
     train_dataset, test_dataset = load_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
-    #probe.after_training_eval(ProbeDataset(test_dataset), save_location="test") #for testing
     probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
 
     date_prefix=datetime.today().strftime("%m_%d")
@@ -61,4 +60,55 @@ def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=de
         probe.after_training_eval(probe_test_dataset, f"{save_dir}/{date_prefix}_{save_name}_eval.txt")
     return probe
 
+class L1_Choice_Trainer:
+    def __init__(self, sae_to_probe:SAEforProbing, save_name:str, save_dir="trained_probes", L1_probe=None, sparsity_coeff=None, L1_training_params=TrainingParams(), choice_training_params=TrainingParams(num_train_data=2000000), init_with_L1=False, bound_factor=0.01):
+        self.sae_to_probe = sae_to_probe
+        self.save_name = save_name
+        self.save_dir = save_dir
+        self.choice_training_params = choice_training_params
+        self.L1_training_params = L1_training_params
+        self.init_with_L1 = init_with_L1
+        self.bound_factor = bound_factor
+        if L1_probe == None:
+            self.L1_probe = L1_Sparse_Probe(sae_to_probe, sparsity_coeff)
+            self.L1_probe_trained = False
+        else:
+            self.L1_probe = L1_probe
+            self.L1_probe_trained = True
+
+    def train_L1_probe(self):
+        train_dataset, test_dataset = load_datasets_automatic(train_size=self.L1_training_params.num_train_data, test_size=self.L1_training_params.num_test_data)
+        self.L1_probe.train_model(train_dataset, test_dataset, learning_rate=self.L1_training_params.lr, report_every_n_data=self.L1_training_params.report_every_n_data)
+
+    def initialize_choice_probe(self):
+        self.chosen_features_list = []
+        if self.init_with_L1:
+            initial_bias = self.L1_probe.linear.bias
+            initial_weights = []
+        sparse_weights = self.L1_probe.linear.weight.reshape(64, 3, -1)
+        for position in range(64):
+            max_weight = torch.max(sparse_weights[position])
+            max_feature_weights = sparse_weights[position].max(dim=0).values
+            feature_indices = torch.nonzero(max_feature_weights >= (max_weight * self.bound_factor))
+            self.chosen_features_list.append(feature_indices.flatten().tolist())
+            if self.init_with_L1:
+                initial_weights.append(sparse_weights[position, :, feature_indices])
+
+        if self.init_with_L1:
+            self.choice_probe = Pre_Chosen_Features_Gated_Probe(self.sae_to_probe, self.chosen_features_list, initial_weights=initial_weights, initial_bias=initial_bias)
+        else:
+            self.choice_probe = Pre_Chosen_Features_Gated_Probe(self.sae_to_probe, self.chosen_features_list)
+
+    def train_choice_probe(self):
+        train_probe(self.choice_probe, self.save_name, self.choice_training_params, self.save_dir, eval_after=True)
+
+    def train(self):
+        if not self.L1_probe_trained:
+            print("\nTraining L1 probe.\n")
+            self.train_L1_probe()
+
+        self.initialize_choice_probe()
+
+        print("\nTraining choice probe.\n")
+        self.train_choice_probe()
 

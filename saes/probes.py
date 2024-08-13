@@ -15,6 +15,7 @@ from EWOthello.mingpt.dataset import CharDataset
 from EWOthello.data.othello import OthelloBoardState
 from sae_template import SAETemplate
 from architectures import suppress_lower_activations
+from train import TrainingParams
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -218,36 +219,18 @@ class L1_Sparse_Probe(LinearProbe):
         loss = accuracy_loss + self.sparsity_coeff * sparsity_loss
         return loss, logits
     
-class L1_Choice_Probe(L1_Sparse_Probe):
-    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float, sparsity_loss_training_proportion: float, weight_bound=0.01):
-        super().__init__(model_to_probe, sparsity_coeff)
-        self.sparsity_loss_training_proportion = sparsity_loss_training_proportion
-        self.weight_bound = weight_bound
+    def print_evaluation(self, train_loss, eval_dataset: ProbeDataset, step_number="N/A"):
+        super().print_evaluation(train_loss, eval_dataset, step_number)
+        weights = self.linear.weight.reshape((64, 3, -1))
+        
+        max_weights = torch.max(weights.reshape(64, -1), dim=-1).values
+        max_feature_weights = weights.max(dim=1).values
+        num_features_chosen = torch.sum(max_feature_weights >= (max_weights.unsqueeze(-1) * 0.01))
 
-    def training_prep(self, train_dataset=None, batch_size=None, num_epochs=None):
-        num_steps = len(train_dataset) * num_epochs / batch_size
-        self.sparsity_loss_steps = round(num_steps*self.sparsity_loss_training_proportion)
-        self.sparsity_loss = True
-
-    def after_step_update(self, step=None):
-        if step == self.sparsity_loss_steps:
-            self.sparsity_loss = False
-            self.above_mask = self.linear.weight >= self.weight_bound
-            print("\nFeatures chosen.  Now training without sparsity loss.\n")
-    
-    def forward(self, activations, targets):
-        if self.sparsity_loss:
-            logits = self.linear(activations)
-            sparsity_loss = torch.abs(self.linear.weight).mean()
-        else:
-            logits = activations @ (self.linear.weight*self.above_mask).transpose(0, 1) + self.linear.bias
-            sparsity_loss = 0.0
-        accuracy_loss = super().loss(logits, targets)
-        loss = accuracy_loss + self.sparsity_coeff * sparsity_loss
-        return loss, logits
-    
-    """ def after_training_eval(self, eval_dataset: ProbeDataset, save_location: str):
-        super().after_training_eval(eval_dataset, save_location, weight=self.linear.weight*self.above_mask) """
+        top5_weights = torch.topk(weights, k=5, dim=-1).values
+        with open("L1_training_top_weights.txt", "a") as f:
+            f.write(f"Number of features chosen after {step_number} steps: {num_features_chosen}; Average per position: {num_features_chosen/64}\n")
+            f.write(f"Top weights after {step_number} steps:\n{top5_weights}\n\n")
     
 class Without_Topk_Sparse_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, k: int, sparsity_coeff: float):
@@ -320,7 +303,7 @@ class K_Annealing_Probe(Leaky_Topk_Probe):
     
 class Pre_Chosen_Features_Gated_Probe(LinearProbe):
     #chosen_features_list is a list containing 64 lists containing feature indices
-    def __init__(self, model_to_probe: SAEforProbing, chosen_features_list: list):
+    def __init__(self, model_to_probe: SAEforProbing, chosen_features_list: list, initial_weights=None, initial_bias=None):
         Module.__init__(self)
         self.model_to_probe = model_to_probe
         self.layer_to_probe = "hidden"
@@ -331,31 +314,38 @@ class Pre_Chosen_Features_Gated_Probe(LinearProbe):
         for param in model_to_probe.parameters():
             param.requires_grad=False
 
-        num_features = self.model_to_probe.sae.num_features
-
         max_features_per_position = max([len(feature_indices) for feature_indices in chosen_features_list])
-        features_to_use_mask = torch.ones(64, 1, max_features_per_position)
+        self.features_to_use_mask = torch.ones(64, 1, max_features_per_position)
 
         for position, feature_indices in enumerate(chosen_features_list):
             num_unique_indices = len(feature_indices)
             for i in range(max_features_per_position - len(feature_indices)):
                 feature_indices.append(feature_indices[0])
+                if initial_weights:
+                    initial_weights[position].append(0.0)
                 index = i + num_unique_indices
-                features_to_use_mask[position, 0, index] = 0 #test that this does the right thing
+                self.features_to_use_mask[position, 0, index] = 0
         self.indices = torch.Tensor(chosen_features_list).int()
 
-        self.weight = torch.nn.Parameter(torch.randn((64, 3, max_features_per_position)) * features_to_use_mask)
-        self.bias = torch.nn.Parameter(torch.zeros(64, 3))
+        if initial_weights:
+            self.weight = torch.nn.Parameter(torch.Tensor(initial_weights))
+        else:
+            self.weight = torch.nn.Parameter(torch.randn((64, 3, max_features_per_position)) * self.features_to_use_mask)
+        if initial_bias:
+            self.bias = torch.nn.Parameter(initial_bias)
+        else:
+            self.bias = torch.nn.Parameter(torch.zeros(64, 3))
 
     def forward(self, activations, targets):
-        chosen_activations = activations[:, :, self.indices] #test that this does the right thing
+        chosen_activations = activations[:, :, self.indices]
         #test
         """ for batch in range(activations.shape[0]):
             for move in range(activations.shape[1]):
                 for position in range(64):
                     for index in range(self.weight.shape[-1]):
                         assert torch.Tensor.isclose(chosen_activations[batch, move, position, index], activations[batch, move, self.indices[position, index]]) """
-        logits = torch.einsum("ijk,...ik->...ij", self.weight, chosen_activations) + self.bias #test that this does the right thing
+        weight = self.weight*self.features_to_use_mask
+        logits = torch.einsum("ijk,...ik->...ij", weight, chosen_activations) + self.bias
         #test
         """ for batch in range(activations.shape[0]):
             for move in range(activations.shape[1]):
@@ -370,12 +360,14 @@ class Pre_Chosen_Features_Gated_Probe(LinearProbe):
             eval_dataset = ProbeDataset(eval_dataset)
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         self.compute_accuracy(logits, targets)
+        features_used_per_position = (self.indices.reshape((8, 8, -1)) + 1) * self.features_to_use_mask.reshape((8, 8 ,-1)) - 1
+        num_features_used_per_position = self.features_to_use_mask.sum(dim=-1).reshape((8, 8))
         with open(save_location, 'a') as f:
-            f.write(f"Average accuracy: {self.accuracy}\n")
+            f.write(f"Average accuracy: {self.accuracy}; Average number of features used per position: {num_features_used_per_position.mean()}\n")
             f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
-            f.write(f"\nFeatures used by each board position:\n{self.indices.reshape((8, 8, -1))}\n")
+            f.write(f"Number of features used by board position:\n {num_features_used_per_position}\n")
+            f.write(f"\nFeatures used by each board position:\n{features_used_per_position}\n")
             f.write(f"\nWeights by board position and class:\n{self.weight.reshape((8, 8, 3, -1))}")
-
 
 class Gated_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, init_type="ones"):
