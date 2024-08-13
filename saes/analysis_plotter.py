@@ -7,8 +7,9 @@ from matplotlib import pyplot as plt
 import diptest
 import re
 
-from utils import load_datasets_automatic
-from board_states import get_board_states
+from saes.utils import load_datasets_automatic
+from saes.analysis_metrics import compute_feature_frequency
+from saes.board_states import get_board_states
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -124,20 +125,6 @@ def show_best_feature(sae, position_index, piece_class):
     _, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
     plot_feature_activations(sae, feature_to_use, position_index, test_dataset)
 
-def compute_feature_dip_scores(sae):
-    '''
-    given an sae, computes the dip scores for all features
-    dip scores measure bimodality. A score >0.01 is somewhat bimodal, and >0.02 is "clearly" bimodal
-    '''
-    train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
-    residual_streams, hidden_layers, reconstructed_residual_streams=sae.catenate_outputs_on_dataset(test_dataset, batch_size=8, include_loss=False)
-    hidden_layers=hidden_layers.transpose(0,2).flatten(start_dim=1)
-    dip_scores=[]
-    for feature_scores in hidden_layers:
-        dip = diptest.dipstat(feature_scores.detach().numpy())
-        dip_scores.append(dip)
-    return torch.tensor(dip_scores)
-
 def plot_many_saes(prefix, dir="trained_models"):
     suffix=".txt"
     smd_expression='Number of SMD>2'
@@ -181,20 +168,17 @@ def plot_many_saes(prefix, dir="trained_models"):
     plt.savefig("Comparison.jpg")
     return
 
-@torch.inference_mode()
-def compute_feature_frequency(sae):
-    _, dataset = load_datasets_automatic(train_size=1, test_size=1000)
-    _, hidden_layers, __=sae.catenate_outputs_on_dataset(dataset, include_loss=False)
-    frequencies=(hidden_layers.flatten(end_dim=-2)>0).mean(dim=0, dtype=float)
+def plot_frequencies_vs_classifier_quality(sae):
+    frequencies=compute_feature_frequency(sae)
     frequencies=torch.sort(frequencies).values
+
     good_classifier_indices=torch.nonzero(sae.classifier_smds>2)[:,0].tolist()
 
     plt.scatter(range(len(frequencies)), torch.sort(frequencies).values)
     plt.scatter(good_classifier_indices, torch.sort(frequencies).values[good_classifier_indices])
     return
 
-@torch.inference_mode()
-def board_state_frequency_vs_smd(sae, include_aurocs=False):
+def board_state_frequency_vs_smd(sae, include_aurocs=False, sae_title=None):
     smds=sae.classifier_smds.max(dim=0).values
     board_state_frequencies=torch.zeros(smds.shape)
     _, dataset = load_datasets_automatic(train_size=1, test_size=1000)
@@ -218,17 +202,27 @@ def board_state_frequency_vs_smd(sae, include_aurocs=False):
         plt.scatter(board_state_frequencies, smds)
     plt.xlabel("Board State Feature Frequency")
     plt.ylabel("Best SMD")
-    plt.title("Frequency vs SMD for 64x3 board states and piece classes")
-    plt.savefig("frequency_vs_smd.png")
-    return
+    plot_title="Frequency vs SMD for 64x3 board states and piece classes"
+    save_location="analysis_results/frequency_vs_smd"
+    if sae_title:
+        reduced_sae_title=sae_title.split("/")[-1].split(".")[0]
+        plot_title+=f"\nSAE: {reduced_sae_title}"
+        save_location+="_"+reduced_sae_title
+    plt.title(plot_title)
+    plt.savefig(f"{save_location}.png")
+    plt.close()
 
-if __name__=="__main__":
-    sae_locations=[ 'trained_models/07_10_top_k_sae_1024_features_100_sparsity.pkl.pkl',
+if __name__=="__main__":    
+    sae_locations=[ 
+                    # 'trained_models/07_10_top_k_sae_1024_features_100_sparsity.pkl.pkl',
                     # 'trained_models/07_10_top_k_sae_1024_features_150_sparsity.pkl.pkl',
                     # 'trained_models/07_11_top_k_sae_1024_features_200_sparsity.pkl.pkl',
                     # 'trained_models/07_12_saeAnthropic_1024_features_4_sparsity.pkl',
+                    'trained_models/07_30_saeAnthropic_layer_3_1024_features_1_sparsity.pkl',
+                    'trained_models/07_30_saeAnthropic_layer_4_1024_features_1_sparsity.pkl',
+                    'trained_models/07_30_saeAnthropic_layer_5_1024_features_1_sparsity.pkl',
     ]
     for sae_location in sae_locations:
         sae=torch.load(sae_location, map_location=device)
-        board_state_frequency_vs_smd(sae, include_aurocs=True)
+        board_state_frequency_vs_smd(sae, include_aurocs=False, sae_title=sae_location)
     plt.show()
