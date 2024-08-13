@@ -1,19 +1,21 @@
 import torch
 from typing import Union
-from sae_template import SAETemplate
-from probes import LinearProbe, ProbeDataset
 from EWOthello.mingpt.model import GPTforProbing
-from utils import load_datasets_automatic
 from datetime import datetime
 import os
+from saes.sae_template import SAETemplate
+from saes.probes import LinearProbe, ProbeDataset
+from saes.utils import load_datasets_automatic
 
 class TrainingParams:
 
-    def __init__(self, lr=5e-4, num_train_data=1000000, num_test_data=1000, report_every_n_data=50000):
+    def __init__(self, lr=5e-4, num_train_data=1000000, num_test_data=1000, report_every_n_data=50000, compute_smd=True, compute_aurocs=False):
         self.lr=lr
         self.num_train_data=num_train_data
         self.num_test_data=num_test_data
         self.report_every_n_data=report_every_n_data
+        self.compute_smd=compute_smd
+        self.compute_aurocs=compute_aurocs
 
 default_train_params=TrainingParams()
 test_train_params=TrainingParams(num_test_data=100, report_every_n_data=500)
@@ -34,7 +36,10 @@ def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingPara
     '''
     train_dataset, test_dataset = load_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
     sae.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
-    sae.compute_all_smd(test_dataset)
+    if train_params.compute_smd:
+        sae.compute_all_smd(test_dataset)
+    if train_params.compute_aurocs:
+        sae.compute_all_aurocs(test_dataset)
     this_message=sae.model_specs_to_string(test_dataset)
     if print_results:
         print(this_message)

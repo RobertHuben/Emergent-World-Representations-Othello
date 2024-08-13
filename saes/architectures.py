@@ -1,11 +1,10 @@
 import torch 
 from torch.nn import functional as F
 import logging
-
 import numpy as np
 
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
-from sae_template import SAETemplate
+from saes.sae_template import SAETemplate
 
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
@@ -239,6 +238,13 @@ class Leaky_Topk_SAE(SAETemplate):
 
     def report_model_specific_features(self):
         return [f"k (sparsity): {self.k}", f"Epsilon (leakyness): {self.epsilon}"]
+
+    def post_copying_update(self, original_sae, new_feature_indices):
+        '''
+        if there are fewer features than k, make k equal the number of features
+        '''
+        if len(new_feature_indices)<self.k:
+            self.k=len(new_feature_indices)
 
 class K_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
     def __init__(self, gpt: GPTforProbing, num_features: int, epsilon: float, k_start: int, anneal_start: int, k_end: int, decoder_initialization_scale=0.1):
