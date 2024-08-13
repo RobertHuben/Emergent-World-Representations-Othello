@@ -1,11 +1,10 @@
 import torch 
 from torch.nn import functional as F
 import logging
-
 import numpy as np
 
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
-from sae_template import SAETemplate
+from saes.sae_template import SAETemplate
 
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
