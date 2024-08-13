@@ -15,7 +15,6 @@ from EWOthello.mingpt.dataset import CharDataset
 from EWOthello.data.othello import OthelloBoardState
 from sae_template import SAETemplate
 from architectures import suppress_lower_activations
-from train import TrainingParams
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 

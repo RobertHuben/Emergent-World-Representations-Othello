@@ -8,7 +8,7 @@ from tqdm import tqdm
 from sae_template import SAEPretrainedProbes
 from architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
-#from analysis_plotter import plot_smd_auroc_distributions
+from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae, test_train_params, train_probe, L1_Choice_Trainer
 from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, Pre_Chosen_Features_Gated_Probe, L1_Gated_Probe, K_Annealing_Gated_Probe, Constant_Probe, SAEforProbing
 from train import TrainingParams
