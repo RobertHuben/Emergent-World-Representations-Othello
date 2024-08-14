@@ -314,25 +314,25 @@ class Pre_Chosen_Features_Gated_Probe(LinearProbe):
         for param in model_to_probe.parameters():
             param.requires_grad=False
 
-        max_features_per_position = max([len(feature_indices) for feature_indices in chosen_features_list])
+        max_features_per_position = max([feature_indices.shape[0] for feature_indices in chosen_features_list])
         self.features_to_use_mask = torch.ones(64, 1, max_features_per_position)
+        padded_features_list = []
 
         for position, feature_indices in enumerate(chosen_features_list):
-            num_unique_indices = len(feature_indices)
-            for i in range(max_features_per_position - len(feature_indices)):
-                feature_indices.append(feature_indices[0])
-                if initial_weights:
-                    initial_weights[position].append(0.0)
-                index = i + num_unique_indices
-                self.features_to_use_mask[position, 0, index] = 0
-        self.indices = torch.Tensor(chosen_features_list).int()
+            num_unique_indices = feature_indices.shape[0]
+            places_to_pad = max_features_per_position - num_unique_indices
+            padded_features_list.append(torch.cat((feature_indices, torch.ones(places_to_pad)*feature_indices[0])))
+            self.features_to_use_mask[position, 0, num_unique_indices:] = torch.zeros(places_to_pad)
+            if initial_weights:
+                initial_weights[position] = torch.cat((initial_weights[position], torch.zeros((3, places_to_pad))), dim=1)            
+        self.indices = torch.stack(padded_features_list).type(torch.int)
 
         if initial_weights:
-            self.weight = torch.nn.Parameter(torch.Tensor(initial_weights))
+            self.weight = torch.nn.Parameter(torch.stack(initial_weights))
         else:
             self.weight = torch.nn.Parameter(torch.randn((64, 3, max_features_per_position)) * self.features_to_use_mask)
-        if initial_bias:
-            self.bias = torch.nn.Parameter(initial_bias)
+        if initial_bias != None:
+            self.bias = torch.nn.Parameter(initial_bias.reshape((64, 3)))
         else:
             self.bias = torch.nn.Parameter(torch.zeros(64, 3))
 

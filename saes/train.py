@@ -87,10 +87,10 @@ class L1_Choice_Trainer:
             initial_weights = []
         sparse_weights = self.L1_probe.linear.weight.reshape(64, 3, -1)
         for position in range(64):
-            max_weight = torch.max(sparse_weights[position])
-            max_feature_weights = sparse_weights[position].max(dim=0).values
-            feature_indices = torch.nonzero(max_feature_weights >= (max_weight * self.bound_factor))
-            self.chosen_features_list.append(feature_indices.flatten().tolist())
+            max_abs_weight = torch.max(torch.abs(sparse_weights[position]))
+            max_abs_feature_weights = torch.abs(sparse_weights[position]).max(dim=0).values
+            feature_indices = torch.nonzero(max_abs_feature_weights >= (max_abs_weight * self.bound_factor)).flatten()
+            self.chosen_features_list.append(feature_indices.flatten())
             if self.init_with_L1:
                 initial_weights.append(sparse_weights[position, :, feature_indices])
 

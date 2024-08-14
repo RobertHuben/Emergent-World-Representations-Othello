@@ -140,8 +140,8 @@ if __name__=="__main__":
     #leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005], mode_list=["absolute"])
     #gated_training_sweep([60, 100, 120, 150], ["standard"])
 
-    #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
-    sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
+    sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
+    #sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     
     """ sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
@@ -153,9 +153,10 @@ if __name__=="__main__":
         train_probe(probe, probe_name, train_params=train_params, eval_after=True)
  """
     
-    params_list = [27, 33, 36, 39, 42, 45, 48]
+    """ params_list = [27, 33, 36, 39, 42, 45, 48]
     L1_probe_sweep(sae_location, params_list)
-    
+ """    
+
     """ params_list = []
     for coeff in [1, 10, 20]:
         for k in [1, 2, 3]:
@@ -196,12 +197,14 @@ if __name__=="__main__":
     probe = Constant_Probe(sae_to_probe, input_dim=1024)
     train_probe(probe, "constant_probe", train_params=training_params, eval_after=True) """
 
-    #L1_probe_location = "trained_probes/08_09_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff=30.pkl"
+    L1_probe_location = "trained_probes/08_09_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff=30.pkl"
     #L1_probe_location = "08_09_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff=30.pkl"
 
-    """ sae = torch.load(sae_location, map_location=device)
+    sae = torch.load(sae_location, map_location=device)
+    sae_to_probe = SAEforProbing(sae)
     L1_probe = torch.load(L1_probe_location, map_location=device)
-    save_name = "L1_choice_probe"
     sparsity_coeff = 30
-    trainer = L1_Choice_Trainer(sae, save_name, L1_probe=L1_probe, sparsity_coeff=sparsity_coeff)
-    trainer.train() """
+    for init in [False, True]:
+        save_name = f"L1_choice_probe_coeff=30_init={init}"
+        trainer = L1_Choice_Trainer(sae_to_probe, save_name, L1_probe=L1_probe, sparsity_coeff=sparsity_coeff, init_with_L1=init)
+        trainer.train()
