@@ -226,10 +226,11 @@ class L1_Sparse_Probe(LinearProbe):
         max_feature_weights = weights.max(dim=1).values
         num_features_chosen = torch.sum(max_feature_weights >= (max_weights.unsqueeze(-1) * 0.01))
 
-        top5_weights = torch.topk(weights, k=5, dim=-1).values
+        top5_weights = torch.topk(weights, k=5, dim=-1)
         with open("L1_training_top_weights.txt", "a") as f:
             f.write(f"Number of features chosen after {step_number} steps: {num_features_chosen}; Average per position: {num_features_chosen/64}\n")
-            f.write(f"Top weights after {step_number} steps:\n{top5_weights}\n\n")
+            f.write(f"Top features after {step_number} steps:\n{top5_weights.indices}\n\n")
+            f.write(f"Top weights after {step_number} steps:\n{top5_weights.values}\n\n")
     
 class Without_Topk_Sparse_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, k: int, sparsity_coeff: float):
