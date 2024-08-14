@@ -268,6 +268,29 @@ class K_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
     def report_model_specific_eval_results(self, hidden_layers=None):
         [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
     
+
+class Epsilon_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
+    def __init__(self, gpt: GPTforProbing, num_features: int, k: int, epsilon_start: int, epsilon_end: int, decoder_initialization_scale=0.1, annealing_mode='linear'):
+        assert annealing_mode in ['linear', 'exponential']
+        super().__init__(gpt, num_features, epsilon=epsilon_start, k=k, decoder_initialization_scale=decoder_initialization_scale)
+        self.epsilon_start = epsilon_start
+        self.epsilon_end = epsilon_end
+        self.annealing_mode=annealing_mode
+
+    def training_prep(self, train_dataset=None, eval_dataset=None, batch_size=None, num_epochs=None):
+        num_steps = len(train_dataset) * num_epochs / batch_size
+        self.epsilon_step_linear = (self.epsilon_end-self.epsilon_start)/num_steps
+        self.epsilon_step_exponential = (self.epsilon_end/self.epsilon_start)**(1/num_steps)
+    
+    def after_step_update(self, hidden_layer=None, step=None):
+        if self.annealing_mode=='linear':
+            self.epsilon+=self.epsilon_step_linear
+        elif self.annealing_mode=='exponential':
+            self.epsilon*=self.epsilon_step_exponential
+    
+    # def report_model_specific_eval_results(self, hidden_layers=None):
+    #     [f"    Average activations over epsilon: {float(torch.mean(hidden_layers > self.epsilon)):.1f}"]
+    
 class Random_Leaky_Topk_SAE(Leaky_Topk_SAE):
     '''
     Currently supports poisson and normal distribution for k

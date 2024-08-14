@@ -1,5 +1,5 @@
 import torch
-from utils import load_datasets_automatic
+from saes.utils import load_datasets_automatic
 import diptest
 
 
