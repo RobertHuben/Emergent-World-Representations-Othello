@@ -198,13 +198,14 @@ if __name__=="__main__":
     train_probe(probe, "constant_probe", train_params=training_params, eval_after=True) """
 
     #L1_probe_location = "trained_probes/08_09_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff=30.pkl"
-    L1_probe_location = "08_09_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff=30.pkl"
+    #L1_probe_location = "08_09_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff=30.pkl"
 
     sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
-    L1_probe = torch.load(L1_probe_location, map_location=device)
-    sparsity_coeff = 30
-    for init in [True]:
-        save_name = f"L1_choice_probe_coeff=30_init={init}"
-        trainer = L1_Choice_Trainer(sae_to_probe, save_name, L1_probe=L1_probe, sparsity_coeff=sparsity_coeff, init_with_L1=init)
-        trainer.train()
+    for init in [False, True]:
+        for coeff in [27, 33]:
+            L1_probe_location = f"08_14_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff={coeff}.pkl"
+            L1_probe = torch.load(L1_probe_location, map_location=device)
+            save_name = f"L1_choice_probe_coeff={coeff}_init={init}"
+            trainer = L1_Choice_Trainer(sae_to_probe, save_name, L1_probe=L1_probe, sparsity_coeff=coeff, init_with_L1=init)
+            trainer.train()
