@@ -218,7 +218,8 @@ class L1_Sparse_Probe(LinearProbe):
         loss = accuracy_loss + self.sparsity_coeff * sparsity_loss
         return loss, logits
     
-    def print_evaluation(self, train_loss, eval_dataset: ProbeDataset, step_number="N/A"):
+    #for evaluating the weights for use in a choice probe
+    """ def print_evaluation(self, train_loss, eval_dataset: ProbeDataset, step_number="N/A"):
         super().print_evaluation(train_loss, eval_dataset, step_number)
         abs_weights = torch.abs(self.linear.weight.reshape((64, 3, -1)))
         
@@ -231,7 +232,8 @@ class L1_Sparse_Probe(LinearProbe):
             f.write(f"Number of features chosen after {step_number} steps: {num_features_chosen}; Average per position: {num_features_chosen/64}\n")
             f.write(f"Top features after {step_number} steps:\n{top5_weights.indices}\n\n")
             f.write(f"Top weights after {step_number} steps:\n{top5_weights.values}\n\n")
-    
+ """
+
 class Without_Topk_Sparse_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, k: int, sparsity_coeff: float):
         input_dim = model_to_probe.sae.num_features
