@@ -212,7 +212,7 @@ if __name__=="__main__":
     
     filename_list = os.listdir("trained_models/for_analysis")
     for sae_filename in filename_list:
-        if "07_09" in sae_filename:
+        if "07_09" in sae_filename or "07_10" in sae_filename or "07_11" in sae_filename:
             continue
         sae = torch.load(f"trained_models/for_analysis/{sae_filename}", map_location=device)
         sae_to_probe = SAEforProbing(sae)
