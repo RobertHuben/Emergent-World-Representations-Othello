@@ -10,7 +10,7 @@ import copy
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
 from EWOthello.mingpt.probe_model import BatteryProbeClassification
 from EWOthello.mingpt.dataset import CharDataset
-from board_states import get_board_states
+from saes.board_states import get_board_states
 
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
