@@ -204,7 +204,7 @@ if __name__=="__main__":
     sae_to_probe = SAEforProbing(sae)
     L1_probe = torch.load(L1_probe_location, map_location=device)
     sparsity_coeff = 30
-    for init in [False, True]:
+    for init in [True]:
         save_name = f"L1_choice_probe_coeff=30_init={init}"
         trainer = L1_Choice_Trainer(sae_to_probe, save_name, L1_probe=L1_probe, sparsity_coeff=sparsity_coeff, init_with_L1=init)
         trainer.train()
