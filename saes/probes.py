@@ -220,13 +220,13 @@ class L1_Sparse_Probe(LinearProbe):
     
     def print_evaluation(self, train_loss, eval_dataset: ProbeDataset, step_number="N/A"):
         super().print_evaluation(train_loss, eval_dataset, step_number)
-        weights = self.linear.weight.reshape((64, 3, -1))
+        abs_weights = torch.abs(self.linear.weight.reshape((64, 3, -1)))
         
-        max_weights = torch.max(weights.reshape(64, -1), dim=-1).values
-        max_feature_weights = weights.max(dim=1).values
+        max_weights = torch.max(abs_weights.reshape(64, -1), dim=-1).values
+        max_feature_weights = abs_weights.max(dim=1).values
         num_features_chosen = torch.sum(max_feature_weights >= (max_weights.unsqueeze(-1) * 0.01))
 
-        top5_weights = torch.topk(weights, k=5, dim=-1)
+        top5_weights = torch.topk(abs_weights.reshape(8, 8, 3, -1), k=5, dim=-1)
         with open("L1_training_top_weights.txt", "a") as f:
             f.write(f"Number of features chosen after {step_number} steps: {num_features_chosen}; Average per position: {num_features_chosen/64}\n")
             f.write(f"Top features after {step_number} steps:\n{top5_weights.indices}\n\n")
