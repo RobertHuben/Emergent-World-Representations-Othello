@@ -362,7 +362,7 @@ class Pre_Chosen_Features_Gated_Probe(LinearProbe):
             eval_dataset = ProbeDataset(eval_dataset)
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         self.compute_accuracy(logits, targets)
-        features_used_per_position = (self.indices.reshape((8, 8, -1)) + 1) * self.features_to_use_mask.reshape((8, 8 ,-1)) - 1
+        features_used_per_position = (self.indices.reshape((8, 8, -1)) + 1) * self.features_to_use_mask.reshape((8, 8 ,-1)).type(torch.int) - 1
         num_features_used_per_position = self.features_to_use_mask.sum(dim=-1).reshape((8, 8))
         with open(save_location, 'a') as f:
             f.write(f"Average accuracy: {self.accuracy}; Average number of features used per position: {num_features_used_per_position.mean()}\n")

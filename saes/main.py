@@ -200,7 +200,7 @@ if __name__=="__main__":
     #L1_probe_location = "trained_probes/08_09_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff=30.pkl"
     #L1_probe_location = "08_09_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff=30.pkl"
 
-    sae = torch.load(sae_location, map_location=device)
+    """ sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
     for init in [False, True]:
         for coeff in [27, 33]:
@@ -208,4 +208,16 @@ if __name__=="__main__":
             L1_probe = torch.load(L1_probe_location, map_location=device)
             save_name = f"L1_choice_probe_coeff={coeff}_init={init}"
             trainer = L1_Choice_Trainer(sae_to_probe, save_name, L1_probe=L1_probe, sparsity_coeff=coeff, init_with_L1=init)
-            trainer.train()
+            trainer.train() """
+    
+    filename_list = os.listdir("trained_models/for_analysis")
+    for sae_filename in filename_list:
+        sae = torch.load(f"trained_models/for_analysis/{sae_filename}", map_location=device)
+        sae_to_probe = SAEforProbing(sae)
+        sae_name = sae_filename[:-4]
+        for init in [True]:
+            for coeff in [30]:
+                save_name = f"L1_choice_probe_coeff={coeff}_init={init}_sae={sae_name}"
+                print(f"Training {save_name}.")
+                trainer = L1_Choice_Trainer(sae_to_probe, save_name, sparsity_coeff=coeff, init_with_L1=init)
+                trainer.train()
