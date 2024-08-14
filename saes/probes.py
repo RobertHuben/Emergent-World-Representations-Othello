@@ -326,7 +326,7 @@ class Pre_Chosen_Features_Gated_Probe(LinearProbe):
             padded_features_list.append(torch.cat((feature_indices, torch.ones(places_to_pad).to(device)*feature_indices[0])))
             self.features_to_use_mask[position, 0, num_unique_indices:] = torch.zeros(places_to_pad).to(device)
             if initial_weights:
-                initial_weights[position] = torch.cat((initial_weights[position], torch.zeros((3, places_to_pad))), dim=1)            
+                initial_weights[position] = torch.cat((initial_weights[position], torch.zeros((3, places_to_pad)).to(device)), dim=1)            
         self.indices = torch.stack(padded_features_list).type(torch.int)
 
         if initial_weights:
