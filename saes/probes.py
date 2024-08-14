@@ -330,7 +330,7 @@ class Pre_Chosen_Features_Gated_Probe(LinearProbe):
         if initial_weights:
             self.weight = torch.nn.Parameter(torch.stack(initial_weights))
         else:
-            self.weight = torch.nn.Parameter(torch.randn((64, 3, max_features_per_position)) * self.features_to_use_mask)
+            self.weight = torch.nn.Parameter(torch.randn((64, 3, max_features_per_position)).to(device) * self.features_to_use_mask)
         if initial_bias != None:
             self.bias = torch.nn.Parameter(initial_bias.reshape((64, 3)))
         else:
