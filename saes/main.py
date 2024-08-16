@@ -210,16 +210,28 @@ if __name__=="__main__":
             trainer = L1_Choice_Trainer(sae_to_probe, save_name, L1_probe=L1_probe, sparsity_coeff=coeff, init_with_L1=init)
             trainer.train() """
     
-    filename_list = os.listdir("trained_models/for_analysis")
+    layer = 3
+    coeff = 8
+    num_features = 1024
+    gpt = load_pre_trained_gpt(probe_layer=layer)
+    sae = SAEAnthropic(gpt, num_features, coeff)
+    sae_name = f"anthropic_sae_coeff={coeff}_features={num_features}_layer={layer}"
+    print(f"\nBeginning training of {sae_name}.")
+    train_and_test_sae(sae, sae_name)
+    
+    k = 100
+    sae = Leaky_Topk_SAE(gpt, num_features, epsilon=0, k=k)
+    sae_name = f"topk_sae_k={100}_features={num_features}_layer={layer}"
+    print(f"\nBeginning training of {sae_name}.")
+    train_and_test_sae(sae, sae_name)
+    
+    filename_list = os.listdir("trained_models")
     for sae_filename in filename_list:
-        if "07_09" in sae_filename or "07_10" in sae_filename or "07_11" in sae_filename:
-            continue
-        sae = torch.load(f"trained_models/for_analysis/{sae_filename}", map_location=device)
+        sae = torch.load(f"trained_models/{sae_filename}", map_location=device)
         sae_to_probe = SAEforProbing(sae)
         sae_name = sae_filename[:-4]
-        for init in [True]:
-            for coeff in [30]:
-                save_name = f"L1_choice_probe_coeff={coeff}_init={init}_sae={sae_name}"
-                print(f"Training {save_name}.")
-                trainer = L1_Choice_Trainer(sae_to_probe, save_name, sparsity_coeff=coeff, init_with_L1=init)
-                trainer.train()
+        for coeff in [20, 25, 30, 35]:
+            save_name = f"L1_choice_probe_coeff={coeff}_sae={sae_name}"
+            print(f"Training {save_name}.")
+            trainer = L1_Choice_Trainer(sae_to_probe, save_name, sparsity_coeff=coeff)
+            trainer.train()

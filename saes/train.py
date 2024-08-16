@@ -61,14 +61,15 @@ def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=de
     return probe
 
 class L1_Choice_Trainer:
-    def __init__(self, sae_to_probe:SAEforProbing, save_name:str, save_dir="trained_probes", L1_probe=None, sparsity_coeff=None, L1_training_params=TrainingParams(), choice_training_params=TrainingParams(num_train_data=2000000), init_with_L1=False, bound_factor=0.01):
+    def __init__(self, sae_to_probe:SAEforProbing, save_name:str, save_dir="trained_probes", L1_probe=None, sparsity_coeff=None, L1_training_params=TrainingParams(), choice_training_params=TrainingParams(num_train_data=2000000), init_with_L1=True, bound=0.01, bound_type="absolute"):
         self.sae_to_probe = sae_to_probe
         self.save_name = save_name
         self.save_dir = save_dir
         self.choice_training_params = choice_training_params
         self.L1_training_params = L1_training_params
         self.init_with_L1 = init_with_L1
-        self.bound_factor = bound_factor
+        self.bound = bound
+        self.bound_type = bound_type
         if L1_probe == None:
             self.L1_probe = L1_Sparse_Probe(sae_to_probe, sparsity_coeff)
             self.L1_probe_trained = False
@@ -80,6 +81,14 @@ class L1_Choice_Trainer:
         train_dataset, test_dataset = load_datasets_automatic(train_size=self.L1_training_params.num_train_data, test_size=self.L1_training_params.num_test_data)
         self.L1_probe.train_model(train_dataset, test_dataset, learning_rate=self.L1_training_params.lr, report_every_n_data=self.L1_training_params.report_every_n_data)
 
+        date_prefix=datetime.today().strftime("%m_%d")
+        abs_weights = torch.abs(self.L1_probe.linear.weight)
+        top5_features = torch.topk(abs_weights, k=5, dim=1).indices
+        top5_weights = self.L1_probe.linear.weight.gather(1, top5_features)
+        with open(f"{self.save_dir}/{date_prefix}_{self.save_name}_L1_probe_eval.txt", 'w') as f:
+            f.write(f"\nTop 5 features by board position and class:\n{top5_features.reshape((8, 8, 3, 4))}\n")
+            f.write(f"\nTop 5 weights by board position and class:\n{top5_weights.reshape((8, 8, 3, 4))}")
+
     def initialize_choice_probe(self):
         self.chosen_features_list = []
         if self.init_with_L1:
@@ -87,9 +96,13 @@ class L1_Choice_Trainer:
             initial_weights = []
         sparse_weights = self.L1_probe.linear.weight.reshape(64, 3, -1)
         for position in range(64):
-            max_abs_weight = torch.max(torch.abs(sparse_weights[position]))
             max_abs_feature_weights = torch.abs(sparse_weights[position]).max(dim=0).values
-            feature_indices = torch.nonzero(max_abs_feature_weights >= (max_abs_weight * self.bound_factor)).flatten()
+            if self.bound_type == "absolute":
+                bound = self.bound
+            elif self.bound_type == "relative":
+                max_abs_weight = torch.max(torch.abs(sparse_weights[position]))
+                bound = max_abs_weight * self.bound
+            feature_indices = torch.nonzero(max_abs_feature_weights >= bound).flatten()
             self.chosen_features_list.append(feature_indices.flatten())
             if self.init_with_L1:
                 initial_weights.append(sparse_weights[position, :, feature_indices])
