@@ -153,9 +153,9 @@ if __name__=="__main__":
         train_probe(probe, probe_name, train_params=train_params, eval_after=True)
  """
     
-    """ params_list = [27, 33, 36, 39, 42, 45, 48]
+    params_list = [27, 33, 36, 39, 42, 45, 48]
     L1_probe_sweep(sae_location, params_list)
- """    
+    
 
     """ params_list = []
     for coeff in [1, 10, 20]:
@@ -225,7 +225,7 @@ if __name__=="__main__":
     print(f"\nBeginning training of {sae_name}.")
     train_and_test_sae(sae, sae_name) """
     
-    filename_list = os.listdir("trained_models")
+    """ filename_list = os.listdir("trained_models")
     for sae_filename in filename_list:
         if sae_filename[-3:] == "txt":
             continue
@@ -237,3 +237,4 @@ if __name__=="__main__":
             print(f"Training {save_name}.")
             trainer = L1_Choice_Trainer(sae_to_probe, save_name, sparsity_coeff=coeff)
             trainer.train()
+ """

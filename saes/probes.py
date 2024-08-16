@@ -22,13 +22,32 @@ class ProbeDataset(Dataset):
     def __init__(self, game_dataset:CharDataset):
         self.game_dataset = game_dataset
         self.enemy_own_modifier = np.concatenate([np.ones((1,64))*(-1)**i for i in range(59)],axis=0)
+        self.board_state_dataset = []
+        for index in range(len(self.game_dataset)):
+            x, _ = self.game_dataset[index]
+            tbf = [self.game_dataset.itos[_] for _ in x.tolist()]
+            valid_until = tbf.index(-100) if -100 in tbf else 999
+
+            # Get the board state vectors
+            a = OthelloBoardState()
+            board_state = a.get_gt(tbf[:valid_until], "get_state")
+            board_state = (np.array(board_state) - 1.0) * self.enemy_own_modifier[:valid_until, :] + 1.0
+            board_state = torch.tensor(board_state, dtype=torch.float32)#.to(device)
+            if valid_until < len(tbf):
+                padding = -100*torch.ones(len(tbf)-valid_until, 64)#.to(device)
+                board_state = torch.cat((board_state, padding), 0)
+            self.board_state_dataset.append(board_state.to(dtype=int))
+
+            #for testing
+            if index % 1000 == 0:
+                print(f"{index // 1000}")
     
     def __len__(self):
         return len(self.game_dataset)
 
     def __getitem__(self, index):
         x, _ = self.game_dataset[index]
-        tbf = [self.game_dataset.itos[_] for _ in x.tolist()]
+        """ tbf = [self.game_dataset.itos[_] for _ in x.tolist()]
         valid_until = tbf.index(-100) if -100 in tbf else 999
 
         # Get the board state vectors
@@ -39,7 +58,9 @@ class ProbeDataset(Dataset):
         if valid_until < len(tbf):
             padding = -100*torch.ones(len(tbf)-valid_until, 64).to(device)
             board_state = torch.cat((board_state, padding), 0)
-        return x, board_state.to(dtype=int)
+        return x, board_state.to(dtype=int) """
+        board_state = self.board_state_dataset[index]
+        return x, board_state
 
 class SAEforProbing(torch.nn.Module):
     def __init__(self, sae:SAETemplate):
