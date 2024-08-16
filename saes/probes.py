@@ -192,8 +192,8 @@ class LinearProbe(torch.nn.Module):
         with open(save_location, 'a') as f:
             f.write(f"Average accuracy: {self.accuracy}\n")
             f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
-            f.write(f"\nTop 5 features by board position and class:\n{top5_features.reshape((8, 8, 3, 4))}\n")
-            f.write(f"\nTop 5 weights by board position and class:\n{top5_weights.reshape((8, 8, 3, 4))}")
+            f.write(f"\nTop 5 features by board position and class:\n{top5_features.reshape((8, 8, 3, 5))}\n")
+            f.write(f"\nTop 5 weights by board position and class:\n{top5_weights.reshape((8, 8, 3, 5))}")
 
 class Constant_Probe(LinearProbe):
     def __init__(self, model_to_probe: Module, input_dim: int):
