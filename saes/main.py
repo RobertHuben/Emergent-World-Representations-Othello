@@ -210,7 +210,7 @@ if __name__=="__main__":
             trainer = L1_Choice_Trainer(sae_to_probe, save_name, L1_probe=L1_probe, sparsity_coeff=coeff, init_with_L1=init)
             trainer.train() """
     
-    layer = 3
+    """ layer = 3
     coeff = 8
     num_features = 1024
     gpt = load_pre_trained_gpt(probe_layer=layer)
@@ -223,10 +223,12 @@ if __name__=="__main__":
     sae = Leaky_Topk_SAE(gpt, num_features, epsilon=0, k=k)
     sae_name = f"topk_sae_k={100}_features={num_features}_layer={layer}"
     print(f"\nBeginning training of {sae_name}.")
-    train_and_test_sae(sae, sae_name)
+    train_and_test_sae(sae, sae_name) """
     
     filename_list = os.listdir("trained_models")
     for sae_filename in filename_list:
+        if sae_filename[-3:] == "txt":
+            continue
         sae = torch.load(f"trained_models/{sae_filename}", map_location=device)
         sae_to_probe = SAEforProbing(sae)
         sae_name = sae_filename[:-4]
