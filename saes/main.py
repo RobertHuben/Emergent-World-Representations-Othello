@@ -70,7 +70,7 @@ def L1_probe_sweep(sae_location:str, sparsity_coeff_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
+    training_params = TrainingParams(num_train_data=30000)
     for coeff in sparsity_coeff_list:
         probe_name = f"L1_probe___sae={sae_name}___coeff={coeff}"
         probe = L1_Sparse_Probe(sae_to_probe, sparsity_coeff=coeff)
