@@ -80,9 +80,9 @@ class L1_Choice_Trainer:
     def train_L1_probe(self):
         train_dataset, test_dataset = load_datasets_automatic(train_size=self.L1_training_params.num_train_data, test_size=self.L1_training_params.num_test_data)
         self.L1_probe.train_model(train_dataset, test_dataset, learning_rate=self.L1_training_params.lr, report_every_n_data=self.L1_training_params.report_every_n_data)
+        date_prefix=datetime.today().strftime("%m_%d")
         torch.save(self.L1_probe, f"{self.save_dir}/{date_prefix}_{self.save_name}_L1_probe.pkl")
 
-        date_prefix=datetime.today().strftime("%m_%d")
         abs_weights = torch.abs(self.L1_probe.linear.weight)
         top5_features = torch.topk(abs_weights, k=5, dim=1).indices
         top5_weights = self.L1_probe.linear.weight.gather(1, top5_features)
