@@ -8,7 +8,9 @@ from abc import abstractmethod
 import torch
 from torch.nn import functional as F
 import numpy as np
+import pickle
 import math
+import itertools
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from EWOthello.mingpt.dataset import CharDataset
@@ -19,48 +21,30 @@ from architectures import suppress_lower_activations
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
 class ProbeDataset(Dataset):
-    def __init__(self, game_dataset:CharDataset):
-        self.game_dataset = game_dataset
-        self.enemy_own_modifier = np.concatenate([np.ones((1,64))*(-1)**i for i in range(59)],axis=0)
-        self.board_state_dataset = []
-        for index in range(len(self.game_dataset)):
-            x, _ = self.game_dataset[index]
-            tbf = [self.game_dataset.itos[_] for _ in x.tolist()]
-            valid_until = tbf.index(-100) if -100 in tbf else 999
+    def __init__(self, games:list):
+        game_sequences = [game[0] for game in games]
+        
+        max_game_length = max([len(game_seq) for game_seq in game_sequences])
+        chars = sorted(list(set(list(itertools.chain.from_iterable(game_sequences)))) + [-100])
+        self.char_to_index = {ch: i for i, ch in enumerate(chars)}
 
-            # Get the board state vectors
-            a = OthelloBoardState()
-            board_state = a.get_gt(tbf[:valid_until], "get_state")
-            board_state = (np.array(board_state) - 1.0) * self.enemy_own_modifier[:valid_until, :] + 1.0
-            board_state = torch.tensor(board_state, dtype=torch.float32)#.to(device)
-            if valid_until < len(tbf):
-                padding = -100*torch.ones(len(tbf)-valid_until, 64)#.to(device)
-                board_state = torch.cat((board_state, padding), 0)
-            self.board_state_dataset.append(board_state.to(dtype=int))
-
-            #for testing
-            if index % 1000 == 0:
-                print(f"{index // 1000}")
+        self.data = []
+        for game in games:
+            game_seq, game_states = game[0], game[1]
+            game_length = len(game_seq)
+            if game_length < max_game_length:
+                padding_length = max_game_length - game_length
+                game_seq += [-100] * padding_length
+                game_states += [[-100] * 64 for i in range(padding_length)]
+            game_indices = [self.char_to_index[char] for char in game_seq]
+            self.data.append((game_indices[:-1], game_states[:-1])) #I think it is correct to take 1 off the end, since we shouldn't be predicting anything from the last move
     
     def __len__(self):
-        return len(self.game_dataset)
+        return len(self.data)
 
     def __getitem__(self, index):
-        x, _ = self.game_dataset[index]
-        """ tbf = [self.game_dataset.itos[_] for _ in x.tolist()]
-        valid_until = tbf.index(-100) if -100 in tbf else 999
-
-        # Get the board state vectors
-        a = OthelloBoardState()
-        board_state = a.get_gt(tbf[:valid_until], "get_state")
-        board_state = (np.array(board_state) - 1.0) * self.enemy_own_modifier[:valid_until, :] + 1.0
-        board_state = torch.tensor(board_state, dtype=torch.float32).to(device)
-        if valid_until < len(tbf):
-            padding = -100*torch.ones(len(tbf)-valid_until, 64).to(device)
-            board_state = torch.cat((board_state, padding), 0)
-        return x, board_state.to(dtype=int) """
-        board_state = self.board_state_dataset[index]
-        return x, board_state
+        x, y = self.data[index]
+        return torch.tensor(x, dtype=torch.long), torch.tensor(y, dtype=torch.float32) #I don't know why these datatypes, just copying previous code
 
 class SAEforProbing(torch.nn.Module):
     def __init__(self, sae:SAETemplate):
@@ -110,7 +94,7 @@ class LinearProbe(torch.nn.Module):
     def loss(self, logits, targets):
         return F.cross_entropy(logits.reshape(-1, 3), targets.reshape(-1), ignore_index=-100)
     
-    def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=1, report_every_n_data=500, learning_rate=1e-3, fixed_seed=1337):
+    def train_model(self, train_dataset:ProbeDataset, eval_dataset:ProbeDataset, batch_size=64, num_epochs=1, report_every_n_data=500, learning_rate=1e-3, fixed_seed=1337):
         '''
         performs a training loop on self, with printed evaluations
         '''
@@ -122,15 +106,12 @@ class LinearProbe(torch.nn.Module):
         step=0
         report_on_batch_number=report_every_n_data//batch_size
 
-        train_probe_dataset = ProbeDataset(train_dataset)
-        eval_probe_dataset = ProbeDataset(eval_dataset)
-
         self.training_prep(train_dataset=train_dataset, batch_size=batch_size, num_epochs=num_epochs)
 
         print(f"Beginning probe training on {device}!")
 
         for epoch in range(num_epochs):
-            train_dataloader=iter(torch.utils.data.DataLoader(train_probe_dataset, batch_size=batch_size, shuffle=True))
+            train_dataloader=iter(torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True))
             print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_data} games.")
             batch_count=0 #for testing
             for input_batch, label_batch in tqdm(train_dataloader):
@@ -145,11 +126,11 @@ class LinearProbe(torch.nn.Module):
                 optimizer.step()
 
                 if step % report_on_batch_number==0:
-                    self.print_evaluation(loss, eval_probe_dataset, step_number=step)
+                    self.print_evaluation(loss, eval_dataset, step_number=step)
 
                 self.after_step_update(step=step)
         else:
-            self.print_evaluation(train_loss=loss, eval_dataset=eval_probe_dataset, step_number="Omega")
+            self.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
         self.eval()
 
     def training_prep(self, train_dataset=None, batch_size=None, num_epochs=None):

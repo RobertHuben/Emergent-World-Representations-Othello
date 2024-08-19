@@ -3,7 +3,7 @@ from typing import Union
 from sae_template import SAETemplate
 from probes import LinearProbe, ProbeDataset, SAEforProbing, L1_Sparse_Probe, Pre_Chosen_Features_Gated_Probe
 from EWOthello.mingpt.model import GPTforProbing
-from utils import load_datasets_automatic
+from utils import load_datasets_automatic, load_probe_datasets_automatic
 from datetime import datetime
 import os
 
@@ -46,8 +46,8 @@ def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingPara
     torch.save(sae, f"{save_dir}/{date_prefix}_{save_name}.pkl")
     return sae
 
-def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=default_train_params, save_dir="trained_probes", eval_after=False):
-    train_dataset, test_dataset = load_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
+def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=default_train_params, save_dir="trained_probes", eval_after=True):
+    train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
     probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
 
     date_prefix=datetime.today().strftime("%m_%d")

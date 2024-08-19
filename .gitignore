@@ -8,3 +8,4 @@ test.py
 trained_models/*
 trained_probes/*
 analysis_results/*
+EWOthello/data/othello_synthetic_with_board_states/*

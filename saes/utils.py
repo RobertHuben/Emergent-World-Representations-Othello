@@ -2,9 +2,14 @@ import torch
 from EWOthello.data.othello import get
 from EWOthello.mingpt.model import GPTConfig, GPTforProbing
 from EWOthello.mingpt.dataset import CharDataset
+from probes import ProbeDataset
 from architectures import SAEDummy
 import random
+import pickle
+import os
 from copy import copy
+from tqdm import tqdm
+import itertools
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -23,6 +28,30 @@ def load_datasets_automatic(train_size:int,test_size:int, shuffle_seed=1) -> Cha
     train_othello.sequences=othello.sequences[:train_size]
     test_othello.sequences=othello.sequences[train_size:train_size+test_size]
     return CharDataset(train_othello), CharDataset(test_othello)
+
+def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1):
+    print("Loading games...")
+    data_dir="EWOthello/data/othello_synthetic_with_board_states"
+    num_datasets_to_load = (test_size+train_size)//100000 + 1
+    games = []
+    filenames = os.listdir(data_dir)
+    bar = tqdm(filenames[:num_datasets_to_load])
+    for filename in bar:
+        with open(f"{data_dir}/{filename}", "rb") as handle:
+            g = pickle.load(handle)
+            games.extend(g)
+    
+    print("Deduplicating...")
+    games.sort()
+    games = [k for k, _ in itertools.groupby(games)]
+    print(f"Deduplicating finished with {len(games)} games left")
+
+    random.seed(shuffle_seed)
+    random.shuffle(games)
+    train_games = games[:train_size]
+    test_games = games[train_size:train_size+test_size]
+    return ProbeDataset(train_games), ProbeDataset(test_games)
+
 
 def load_dataset(split_fraction=1, use_first_half_of_split=True, entries_limit=False, shuffle_seed=1) -> CharDataset:
     othello = get(ood_num=-1, data_root=None, num_preload=11) # 11 corresponds to over 1 million games
