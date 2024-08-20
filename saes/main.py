@@ -10,7 +10,7 @@ from architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae, test_train_params, train_probe, L1_Choice_Trainer
-from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, Pre_Chosen_Features_Gated_Probe, L1_Gated_Probe, K_Annealing_Gated_Probe, Constant_Probe, SAEforProbing
+from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, Pre_Chosen_Features_Gated_Probe, L1_Gated_Probe, K_Annealing_Gated_Probe, Constant_Probe, SAEforProbing, move_list_to_state_list
 from train import TrainingParams
 from utils import load_probe_datasets_automatic
 
@@ -154,7 +154,7 @@ if __name__=="__main__":
         train_probe(probe, probe_name, train_params=train_params, eval_after=True)
  """
     
-    """ import pickle
+    import pickle
     import numpy as np
     from EWOthello.data.othello import OthelloBoardState
     data_dir = "EWOthello/data"
@@ -169,22 +169,24 @@ if __name__=="__main__":
         with open(f"{data_dir}/{sequence_dir}/{filename}", "rb") as handle:
             game_sequences = pickle.load(handle)
             num_games = len(game_sequences)
+            num_forfeited_moves = 0
             for i, seq in enumerate(game_sequences):
-                a = OthelloBoardState()
-                state = a.get_gt(seq, "get_state")
+                state, forfeited_move = move_list_to_state_list(seq)
                 state = ((np.array(state) - 1.0) * enemy_own_modifier[:len(seq), :] + 1.0).tolist()
                 game_seqs_and_states.append([seq, state])
+                if forfeited_move:
+                    num_forfeited_moves += 1
                 if i % 1000 == 999:
-                    print(f"\r{i+1} games computed out of {num_games}", end="")
+                    print(f"\r{i+1} games computed out of {num_games}; {num_forfeited_moves} have a move forfeit.", end="")
         with open(f"{data_dir}/{probe_dir}/{filename_without_extension}_moves_and_game_states.pkl", "wb") as handle:
             pickle.dump(game_seqs_and_states, handle)
-        print(f"\n{n+1} files finished out of 21.\n") """
+        print(f"\n{n+1} files finished out of 21.\n")
 
     sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
     train_params = TrainingParams(num_train_data=90000)
 
-    for mode in ["precomputed"]:
+    for mode in ["precomputed", "not precomputed"]:
         print(f"Training in {mode} mode.")
         train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data, mode=mode)
         probe = L1_Sparse_Probe(sae_to_probe, 2)
