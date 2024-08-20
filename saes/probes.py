@@ -201,8 +201,6 @@ class LinearProbe(torch.nn.Module):
         self.accuracy = self.accuracy_by_board_position.mean()
 
     def print_evaluation(self, train_loss, eval_dataset:ProbeDataset, step_number="N/A"):
-        if not isinstance(eval_dataset, ProbeDataset):
-            eval_dataset = ProbeDataset(eval_dataset)
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         test_loss=losses.mean()
         self.compute_accuracy(logits, targets)
@@ -212,8 +210,6 @@ class LinearProbe(torch.nn.Module):
     def after_training_eval(self, eval_dataset:ProbeDataset, save_location:str, weight=None):
         if weight == None:
             weight = self.linear.weight
-        if not isinstance(eval_dataset, ProbeDataset):
-            eval_dataset = ProbeDataset(eval_dataset)
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         self.compute_accuracy(logits, targets)
         abs_weights = torch.abs(weight)
