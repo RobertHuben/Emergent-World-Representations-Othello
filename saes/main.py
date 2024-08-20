@@ -154,12 +154,24 @@ if __name__=="__main__":
         train_probe(probe, probe_name, train_params=train_params, eval_after=True)
  """
     
-    """ import pickle
+    import pickle
     import numpy as np
     from EWOthello.data.othello import OthelloBoardState
     data_dir = "EWOthello/data"
     sequence_dir = "othello_synthetic"
     probe_dir = "othello_synthetic_with_board_states"
+
+    files_list = os.listdir(f"{data_dir}/{probe_dir}")
+    for n, filename in enumerate(files_list):
+        with open(f"{data_dir}/{probe_dir}/{filename}", "rb") as handle:
+            games = pickle.load(handle)
+        with open(f"{data_dir}/{probe_dir}/{filename[:-4]}_1.pkl", "wb") as handle:
+            pickle.dump(games[:50000], handle)
+        with open(f"{data_dir}/{probe_dir}/{filename[:-4]}_2.pkl", "wb") as handle:
+            pickle.dump(games[50000:], handle)
+        print(f"\r{n+1} files finished out of 39.")
+        
+
     enemy_own_modifier = np.concatenate([np.ones((1,64))*(-1)**i for i in range(60)],axis=0)
     os.makedirs(f"{data_dir}/{probe_dir}", exist_ok=True)
     files_list = os.listdir(f"{data_dir}/{sequence_dir}")
@@ -180,7 +192,7 @@ if __name__=="__main__":
                     print(f"\r{i+1} games computed out of {num_games}; {num_forfeited_moves} have a move forfeit.", end="")
         with open(f"{data_dir}/{probe_dir}/{filename_without_extension}_moves_and_game_states.pkl", "wb") as handle:
             pickle.dump(game_seqs_and_states, handle)
-        print(f"\n{n+1} files finished out of 21.\n") """
+        print(f"\n{n+1} files finished out of 21.\n")
 
     sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
