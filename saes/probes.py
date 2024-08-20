@@ -20,7 +20,35 @@ from architectures import suppress_lower_activations
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
+enemy_own_modifier = np.concatenate([np.ones((1,64))*(-1)**i for i in range(60)],axis=0)
+
 class ProbeDataset(Dataset):
+    def __init__(self, games:list):
+        self.games = games
+        
+        self.max_game_length = max([len(game_seq) for game_seq in games])
+        chars = sorted(list(set(list(itertools.chain.from_iterable(games)))) + [-100])
+        self.char_to_index = {ch: i for i, ch in enumerate(chars)}
+
+    def __len__(self):
+        return len(self.games)
+
+    def __getitem__(self, index):
+        move_seq = self.games[index]
+        game_length = len(move_seq)
+        a = OthelloBoardState()
+        state_seq = a.get_gt(move_seq, "get_state")
+        state_seq = ((np.array(state_seq) - 1.0) * enemy_own_modifier[:game_length, :] + 1.0).tolist()
+
+        if game_length < self.max_game_length:
+            padding_length = self.max_game_length - game_length
+            move_seq += [-100] * padding_length
+            state_seq += [[-100] * 64 for i in range(padding_length)]
+        move_indices = [self.char_to_index[char] for char in move_seq]
+
+        return torch.tensor(move_indices[:-1], dtype=torch.long), torch.tensor(state_seq[:-1], dtype=torch.long) #I don't know why these datatypes, just copying previous code
+
+class ProbeDatasetPrecomputed(Dataset):
     def __init__(self, games:list):
         game_sequences = [game[0] for game in games]
         
@@ -44,7 +72,7 @@ class ProbeDataset(Dataset):
 
     def __getitem__(self, index):
         x, y = self.data[index]
-        return torch.tensor(x, dtype=torch.long), torch.tensor(y, dtype=torch.float32) #I don't know why these datatypes, just copying previous code
+        return torch.tensor(x, dtype=torch.long), torch.tensor(y, dtype=torch.long) #I don't know why these datatypes, just copying previous code
 
 class SAEforProbing(torch.nn.Module):
     def __init__(self, sae:SAETemplate):

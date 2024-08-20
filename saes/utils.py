@@ -2,7 +2,7 @@ import torch
 from EWOthello.data.othello import get
 from EWOthello.mingpt.model import GPTConfig, GPTforProbing
 from EWOthello.mingpt.dataset import CharDataset
-from probes import ProbeDataset
+from probes import ProbeDataset, ProbeDatasetPrecomputed
 from architectures import SAEDummy
 import random
 import pickle
@@ -29,9 +29,12 @@ def load_datasets_automatic(train_size:int,test_size:int, shuffle_seed=1) -> Cha
     test_othello.sequences=othello.sequences[train_size:train_size+test_size]
     return CharDataset(train_othello), CharDataset(test_othello)
 
-def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1):
+def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1, mode="precomputed"):
     print("Loading games...")
-    data_dir="EWOthello/data/othello_synthetic_with_board_states"
+    if mode == "precomputed":
+        data_dir="EWOthello/data/othello_synthetic_with_board_states"
+    else:
+        data_dir="EWOthello/data/othello_synthetic"
     num_datasets_to_load = (test_size+train_size)//100000 + 1
     games = []
     filenames = os.listdir(data_dir)
@@ -50,7 +53,10 @@ def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1)
     random.shuffle(games)
     train_games = games[:train_size]
     test_games = games[train_size:train_size+test_size]
-    return ProbeDataset(train_games), ProbeDataset(test_games)
+    if mode == "precomputed":
+        return ProbeDatasetPrecomputed(train_games), ProbeDatasetPrecomputed(test_games)
+    else:
+        return ProbeDataset(train_games), ProbeDataset(test_games)
 
 
 def load_dataset(split_fraction=1, use_first_half_of_split=True, entries_limit=False, shuffle_seed=1) -> CharDataset:

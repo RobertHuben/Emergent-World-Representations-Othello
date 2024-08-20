@@ -12,6 +12,7 @@ from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae, test_train_params, train_probe, L1_Choice_Trainer
 from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, Pre_Chosen_Features_Gated_Probe, L1_Gated_Probe, K_Annealing_Gated_Probe, Constant_Probe, SAEforProbing
 from train import TrainingParams
+from utils import load_probe_datasets_automatic
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -70,7 +71,7 @@ def L1_probe_sweep(sae_location:str, sparsity_coeff_list:list):
     sae = torch.load(sae_location, map_location=device)
     sae_name = sae_location.split('/')[-1][:-4]
     sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=30000) #change this back to 1000000 when done testing
+    training_params = TrainingParams(num_train_data=1000000) #change this back to 1000000 when done testing
     for coeff in sparsity_coeff_list:
         probe_name = f"L1_probe___sae={sae_name}___coeff={coeff}"
         probe = L1_Sparse_Probe(sae_to_probe, sparsity_coeff=coeff)
@@ -140,8 +141,8 @@ if __name__=="__main__":
     #leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005], mode_list=["absolute"])
     #gated_training_sweep([60, 100, 120, 150], ["standard"])
 
-    #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
-    sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
+    sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
+    #sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     
     """ sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
@@ -153,9 +154,46 @@ if __name__=="__main__":
         train_probe(probe, probe_name, train_params=train_params, eval_after=True)
  """
     
-    params_list = [27, 33, 36, 39, 42, 45, 48]
+    import pickle
+    import numpy as np
+    from EWOthello.data.othello import OthelloBoardState
+    data_dir = "EWOthello/data"
+    sequence_dir = "othello_synthetic"
+    probe_dir = "othello_synthetic_with_board_states"
+    enemy_own_modifier = np.concatenate([np.ones((1,64))*(-1)**i for i in range(60)],axis=0)
+    os.makedirs(f"{data_dir}/{probe_dir}", exist_ok=True)
+    files_list = os.listdir(f"{data_dir}/{sequence_dir}")
+    for n, filename in enumerate(files_list[:21]):
+        filename_without_extension = filename.split(".")[0]
+        game_seqs_and_states = []
+        with open(f"{data_dir}/{sequence_dir}/{filename}", "rb") as handle:
+            game_sequences = pickle.load(handle)
+            num_games = len(game_sequences)
+            for i, seq in enumerate(game_sequences):
+                a = OthelloBoardState()
+                state = a.get_gt(seq, "get_state")
+                state = ((np.array(state) - 1.0) * enemy_own_modifier[:len(seq), :] + 1.0).tolist()
+                game_seqs_and_states.append([seq, state])
+                if i % 1000 == 999:
+                    print(f"\r{i+1} games computed out of {num_games}", end="")
+        with open(f"{data_dir}/{probe_dir}/{filename_without_extension}_moves_and_game_states.pkl", "wb") as handle:
+            pickle.dump(game_seqs_and_states, handle)
+        print(f"\n{n+1} files finished out of 21.\n")
+
+    sae = torch.load(sae_location, map_location=device)
+    sae_to_probe = SAEforProbing(sae)
+    train_params = TrainingParams(num_train_data=2000000)
+
+    for mode in ["precomputed", "not precomputed"]:
+        print(f"Training in {mode} mode.")
+        train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data, mode=mode)
+        probe = L1_Sparse_Probe(sae_to_probe, 2)
+        probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
+
+
+    """ params_list = [27, 33, 36, 39, 42, 45, 48]
     L1_probe_sweep(sae_location, params_list)
-    
+ """    
 
     """ params_list = []
     for coeff in [1, 10, 20]:
