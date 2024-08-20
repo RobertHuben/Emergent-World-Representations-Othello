@@ -184,7 +184,7 @@ if __name__=="__main__":
     sae_to_probe = SAEforProbing(sae)
     train_params = TrainingParams(num_train_data=90000)
 
-    for mode in ["not precomputed"]:
+    for mode in ["precomputed"]:
         print(f"Training in {mode} mode.")
         train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data, mode=mode)
         probe = L1_Sparse_Probe(sae_to_probe, 2)
