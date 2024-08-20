@@ -154,7 +154,7 @@ if __name__=="__main__":
         train_probe(probe, probe_name, train_params=train_params, eval_after=True)
  """
     
-    import pickle
+    """ import pickle
     import numpy as np
     from EWOthello.data.othello import OthelloBoardState
     data_dir = "EWOthello/data"
@@ -178,11 +178,11 @@ if __name__=="__main__":
                     print(f"\r{i+1} games computed out of {num_games}", end="")
         with open(f"{data_dir}/{probe_dir}/{filename_without_extension}_moves_and_game_states.pkl", "wb") as handle:
             pickle.dump(game_seqs_and_states, handle)
-        print(f"\n{n+1} files finished out of 21.\n")
+        print(f"\n{n+1} files finished out of 21.\n") """
 
     sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
-    train_params = TrainingParams(num_train_data=2000000)
+    train_params = TrainingParams(num_train_data=90000)
 
     for mode in ["precomputed", "not precomputed"]:
         print(f"Training in {mode} mode.")
