@@ -33,9 +33,10 @@ def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1,
     print("Loading games...")
     if mode == "precomputed":
         data_dir="EWOthello/data/othello_synthetic_with_board_states"
+        num_datasets_to_load = 2 #for testing
     else:
         data_dir="EWOthello/data/othello_synthetic"
-    num_datasets_to_load = (test_size+train_size)//100000 + 1
+        num_datasets_to_load = (test_size+train_size)//100000 + 1
     games = []
     filenames = os.listdir(data_dir)
     bar = tqdm(filenames[:num_datasets_to_load])
