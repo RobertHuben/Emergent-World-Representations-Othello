@@ -10,6 +10,7 @@ import os
 from copy import copy
 from tqdm import tqdm
 import itertools
+import zipfile
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -30,16 +31,32 @@ def load_datasets_automatic(train_size:int,test_size:int, shuffle_seed=1) -> Cha
     return CharDataset(train_othello), CharDataset(test_othello)
 
 def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1, mode="precomputed"):
-    print("Loading games...")
     if mode == "precomputed":
         data_dir="EWOthello/data/othello_synthetic_with_board_states"
-        num_datasets_to_load = 2 #for testing
     else:
         data_dir="EWOthello/data/othello_synthetic"
-        num_datasets_to_load = (test_size+train_size)//100000 + 1
+    num_datasets_to_load = (test_size+train_size)//50000 + 1
     games = []
     filenames = os.listdir(data_dir)
-    bar = tqdm(filenames[:num_datasets_to_load])
+    if mode == "precomputed":
+        print("Collecting/unzipping data files...")
+        pickle_files = []
+        for filename in filenames:
+            if filename[-4:] == ".zip":
+                if not (filename[:-4] + ".pkl") in filenames:
+                    with zipfile.ZipFile(f"{data_dir}/{filename}","r") as zip_ref:
+                        zip_ref.extractall(data_dir)
+                    pickle_files.append(filename[:-4] + ".pkl")
+                    print(f"\r{len(pickle_files)} files collected/unzipped.", end="")
+            else:
+                assert filename[-4:] == ".pkl", f"Found file {filename} in data directory that is not a .pkl or .zip file."
+                pickle_files.append(filename)
+                print(f"\r{len(pickle_files)} files collected/unzipped.", end="")
+    else:
+        pickle_files = filenames
+    
+    print("Loading games...")
+    bar = tqdm(pickle_files[:num_datasets_to_load])
     for filename in bar:
         with open(f"{data_dir}/{filename}", "rb") as handle:
             g = pickle.load(handle)

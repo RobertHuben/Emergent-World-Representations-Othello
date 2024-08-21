@@ -163,16 +163,17 @@ if __name__=="__main__":
 
     files_list = os.listdir(f"{data_dir}/{probe_dir}")
     for n, filename in enumerate(files_list):
-        with open(f"{data_dir}/{probe_dir}/{filename}", "rb") as handle:
-            games = pickle.load(handle)
-        with open(f"{data_dir}/{probe_dir}/{filename[:-4]}_1.pkl", "wb") as handle:
-            pickle.dump(games[:50000], handle)
-        with open(f"{data_dir}/{probe_dir}/{filename[:-4]}_2.pkl", "wb") as handle:
-            pickle.dump(games[50000:], handle)
-        print(f"\r{n+1} files finished out of 39.")
+        if not "153929" in filename:
+            with open(f"{data_dir}/{probe_dir}/{filename}", "rb") as handle:
+                games = pickle.load(handle)
+            with open(f"{data_dir}/{probe_dir}/{filename[:-4]}_1.pkl", "wb") as handle:
+                pickle.dump(games[:50000], handle)
+            with open(f"{data_dir}/{probe_dir}/{filename[:-4]}_2.pkl", "wb") as handle:
+                pickle.dump(games[50000:], handle)
+            print(f"\r{n+1} files finished out of 38.") """
         
 
-    enemy_own_modifier = np.concatenate([np.ones((1,64))*(-1)**i for i in range(60)],axis=0)
+    """ enemy_own_modifier = np.concatenate([np.ones((1,64))*(-1)**i for i in range(60)],axis=0)
     os.makedirs(f"{data_dir}/{probe_dir}", exist_ok=True)
     files_list = os.listdir(f"{data_dir}/{sequence_dir}")
     for n, filename in enumerate(files_list[:21]):
@@ -196,13 +197,14 @@ if __name__=="__main__":
 
     sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
-    train_params = TrainingParams(num_train_data=90000)
+    train_params = TrainingParams(num_train_data=2000000)
 
     for mode in ["precomputed", "not precomputed"]:
         print(f"Training in {mode} mode.")
         train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data, mode=mode)
-        probe = L1_Sparse_Probe(sae_to_probe, 2)
-        probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
+        for coeff in [20, 30]:
+            probe = L1_Sparse_Probe(sae_to_probe, 2)
+            probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
 
 
     """ params_list = [27, 33, 36, 39, 42, 45, 48]

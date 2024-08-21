@@ -82,6 +82,7 @@ enemy_own_modifier = np.concatenate([np.ones((1,64))*(-1)**i for i in range(60)]
 class ProbeDataset(Dataset):
     def __init__(self, games:list):
         self.games = games
+        self.computed_data = [False] * len(games)
         
         self.max_game_length = max([len(game_seq) for game_seq in games])
         chars = sorted(list(set(list(itertools.chain.from_iterable(games)))) + [-100])
@@ -93,18 +94,23 @@ class ProbeDataset(Dataset):
         return len(self.games)
 
     def __getitem__(self, index):
-        move_seq = self.games[index]
-        game_length = len(move_seq)
-        state_seq, forfeited_move = move_list_to_state_list(move_seq)
-        state_seq = ((np.array(state_seq) - 1.0) * enemy_own_modifier[:game_length, :] + 1.0).tolist()
-        if forfeited_move:
-            self.num_forfeited_moves += 1
+        datum = self.computed_data[index]
+        if datum:
+            move_indices, state_seq = datum
+        else:
+            move_seq = self.games[index]
+            game_length = len(move_seq)
+            state_seq, forfeited_move = move_list_to_state_list(move_seq)
+            state_seq = ((np.array(state_seq) - 1.0) * enemy_own_modifier[:game_length, :] + 1.0).tolist()
+            if forfeited_move:
+                self.num_forfeited_moves += 1
 
-        if game_length < self.max_game_length:
-            padding_length = self.max_game_length - game_length
-            move_seq += [-100] * padding_length
-            state_seq += [[-100] * 64 for i in range(padding_length)]
-        move_indices = [self.char_to_index[char] for char in move_seq]
+            if game_length < self.max_game_length:
+                padding_length = self.max_game_length - game_length
+                move_seq += [-100] * padding_length
+                state_seq += [[-100] * 64 for i in range(padding_length)]
+            move_indices = [self.char_to_index[char] for char in move_seq]
+            self.computed_data[index] = (move_indices, state_seq)
 
         return torch.tensor(move_indices[:-1], dtype=torch.long), torch.tensor(state_seq[:-1], dtype=torch.long) #I don't know why these datatypes, just copying previous code
 
