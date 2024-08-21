@@ -199,7 +199,7 @@ if __name__=="__main__":
     sae_to_probe = SAEforProbing(sae)
     train_params = TrainingParams(num_train_data=2000000)
 
-    for mode in ["precomputed", "not precomputed"]:
+    for mode in ["not precomputed"]:
         print(f"Training in {mode} mode.")
         train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data, mode=mode)
         for coeff in [20, 30]:
