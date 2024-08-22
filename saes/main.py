@@ -160,17 +160,31 @@ if __name__=="__main__":
     data_dir = "EWOthello/data"
     sequence_dir = "othello_synthetic"
     probe_dir = "othello_synthetic_with_board_states"
+    partial_probe_dir ="othello_synthetic_with_board_state_info"
 
     files_list = os.listdir(f"{data_dir}/{probe_dir}")
-    for n, filename in enumerate(files_list):
-        if not "153929" in filename:
+    for n, filename in enumerate(files_list[:2]):
+        if ".pkl" in filename:
             with open(f"{data_dir}/{probe_dir}/{filename}", "rb") as handle:
                 games = pickle.load(handle)
-            with open(f"{data_dir}/{probe_dir}/{filename[:-4]}_1.pkl", "wb") as handle:
-                pickle.dump(games[:50000], handle)
-            with open(f"{data_dir}/{probe_dir}/{filename[:-4]}_2.pkl", "wb") as handle:
-                pickle.dump(games[50000:], handle)
-            print(f"\r{n+1} files finished out of 38.") """
+            partial_info_games = []
+            for game in games:
+                move_seq = game[0]
+                state_seq = game[1]
+                partial_info_game = []
+                for position in range(64):
+                    position_state = [state[position] for state in state_seq]
+                    position_changes = []
+                    current_state = position_state[0]
+                    for move_index in range(len(position_state)):
+                        if current_state != position_state[move_index]:
+                            current_state = position_state[move_index]
+                            position_changes.append(move_index)
+                    partial_info_game.append(position_changes)
+                partial_info_games.append([move_seq, partial_info_game])
+            with open(f"{data_dir}/{partial_probe_dir}/{filename}", "wb") as handle:
+                pickle.dump(partial_info_games, handle)
+            print(f"\r{n+1} files finished out of 78.") """
         
 
     """ enemy_own_modifier = np.concatenate([np.ones((1,64))*(-1)**i for i in range(60)],axis=0)
@@ -199,11 +213,11 @@ if __name__=="__main__":
     sae_to_probe = SAEforProbing(sae)
     train_params = TrainingParams(num_train_data=2000000)
 
-    for mode in ["not precomputed"]:
+    for mode in ["precomputed", "not precomputed"]:
         print(f"Training in {mode} mode.")
         train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data, mode=mode)
         for coeff in [20, 30]:
-            probe = L1_Sparse_Probe(sae_to_probe, 2)
+            probe = L1_Sparse_Probe(sae_to_probe, coeff)
             probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
 
 

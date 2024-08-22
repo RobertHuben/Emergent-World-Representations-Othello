@@ -47,16 +47,18 @@ def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1,
                     with zipfile.ZipFile(f"{data_dir}/{filename}","r") as zip_ref:
                         zip_ref.extractall(data_dir)
                     pickle_files.append(filename[:-4] + ".pkl")
-                    print(f"\r{len(pickle_files)} files collected/unzipped.", end="")
+                    print(f"\r{len(pickle_files)}/{num_datasets_to_load} files collected/unzipped.", end="")
             else:
                 assert filename[-4:] == ".pkl", f"Found file {filename} in data directory that is not a .pkl or .zip file."
                 pickle_files.append(filename)
-                print(f"\r{len(pickle_files)} files collected/unzipped.", end="")
+                print(f"\r{len(pickle_files)}/{num_datasets_to_load} files collected/unzipped.", end="")
+            if len(pickle_files) == num_datasets_to_load:
+                break
     else:
-        pickle_files = filenames
+        pickle_files = filenames[:num_datasets_to_load]
     
     print("Loading games...")
-    bar = tqdm(pickle_files[:num_datasets_to_load])
+    bar = tqdm(pickle_files)
     for filename in bar:
         with open(f"{data_dir}/{filename}", "rb") as handle:
             g = pickle.load(handle)
