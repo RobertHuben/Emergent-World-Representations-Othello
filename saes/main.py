@@ -209,12 +209,16 @@ if __name__=="__main__":
             pickle.dump(game_seqs_and_states, handle)
         print(f"\n{n+1} files finished out of 21.\n") """
 
-    sae = torch.load(sae_location, map_location=device)
+    """ sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
     train_params = TrainingParams(num_train_data=500000, num_epochs=4)
 
     trainer = L1_Choice_Trainer(sae_to_probe, "test", sparsity_coeff=30)
-    trainer.train()
+    trainer.train() """
+
+    probe = torch.load("trained_probes/08_22_test.pkl", map_location=device)
+    test_dataset, _ = load_probe_datasets_automatic(1000, 1)
+    probe.after_eval_training(test_dataset, "trained_probes/08_22_test_choice_probe_eval.txt")
 
     """ for mode in ["precomputed", "not precomputed"]:
         print(f"Training in {mode} mode.")

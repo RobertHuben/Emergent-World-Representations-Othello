@@ -57,8 +57,7 @@ def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=de
     torch.save(probe, f"{save_dir}/{date_prefix}_{save_name}.pkl")
 
     if eval_after:
-        probe_test_dataset = ProbeDataset(test_dataset)
-        probe.after_training_eval(probe_test_dataset, f"{save_dir}/{date_prefix}_{save_name}_eval.txt")
+        probe.after_training_eval(test_dataset, f"{save_dir}/{date_prefix}_{save_name}_eval.txt")
     return probe
 
 class L1_Choice_Trainer:
