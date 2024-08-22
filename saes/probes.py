@@ -510,8 +510,6 @@ class Pre_Chosen_Features_Gated_Probe(LinearProbe):
         return loss, logits
     
     def after_training_eval(self, eval_dataset:ProbeDataset, save_location:str):
-        if not isinstance(eval_dataset, ProbeDataset):
-            eval_dataset = ProbeDataset(eval_dataset)
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         self.compute_accuracy(logits, targets)
         features_used_per_position = (self.indices.reshape((8, 8, -1)) + 1) * self.features_to_use_mask.reshape((8, 8 ,-1)).type(torch.int) - 1
