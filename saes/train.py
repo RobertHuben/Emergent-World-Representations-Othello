@@ -9,10 +9,11 @@ import os
 
 class TrainingParams:
 
-    def __init__(self, lr=5e-4, num_train_data=1000000, num_test_data=1000, report_every_n_data=50000):
+    def __init__(self, lr=5e-4, num_train_data=1000000, num_test_data=1000, num_epochs=1, report_every_n_data=50000):
         self.lr=lr
         self.num_train_data=num_train_data
         self.num_test_data=num_test_data
+        self.num_epochs = num_epochs
         self.report_every_n_data=report_every_n_data
 
 default_train_params=TrainingParams()
@@ -48,7 +49,7 @@ def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingPara
 
 def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=default_train_params, save_dir="trained_probes", eval_after=True):
     train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
-    probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
+    probe.train_model(train_dataset, test_dataset, num_epochs=train_params.num_epochs, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
 
     date_prefix=datetime.today().strftime("%m_%d")
     if not os.path.exists(save_dir):
@@ -61,7 +62,7 @@ def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=de
     return probe
 
 class L1_Choice_Trainer:
-    def __init__(self, sae_to_probe:SAEforProbing, save_name:str, save_dir="trained_probes", L1_probe=None, sparsity_coeff=None, L1_training_params=TrainingParams(), choice_training_params=TrainingParams(num_train_data=2000000), init_with_L1=True, bound=0.01, bound_type="absolute"):
+    def __init__(self, sae_to_probe:SAEforProbing, save_name:str, save_dir="trained_probes", L1_probe=None, sparsity_coeff=None, L1_training_params=TrainingParams(num_train_data=500000, num_epochs=2), choice_training_params=TrainingParams(num_train_data=500000, num_epochs=4), init_with_L1=True, bound=0.01, bound_type="absolute"):
         self.sae_to_probe = sae_to_probe
         self.save_name = save_name
         self.save_dir = save_dir

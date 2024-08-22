@@ -211,15 +211,18 @@ if __name__=="__main__":
 
     sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
-    train_params = TrainingParams(num_train_data=500000)
+    train_params = TrainingParams(num_train_data=500000, num_epochs=4)
 
-    for mode in ["precomputed", "not precomputed"]:
+    trainer = L1_Choice_Trainer(sae_to_probe, "test", sparsity_coeff=30)
+    trainer.train()
+
+    """ for mode in ["precomputed", "not precomputed"]:
         print(f"Training in {mode} mode.")
         train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data, mode=mode)
         for coeff in [20, 30]:
             probe = L1_Sparse_Probe(sae_to_probe, coeff)
             probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
-
+ """
 
     """ params_list = [27, 33, 36, 39, 42, 45, 48]
     L1_probe_sweep(sae_location, params_list)

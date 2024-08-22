@@ -30,6 +30,7 @@ def load_datasets_automatic(train_size:int,test_size:int, shuffle_seed=1) -> Cha
     test_othello.sequences=othello.sequences[train_size:train_size+test_size]
     return CharDataset(train_othello), CharDataset(test_othello)
 
+#fix so that it collects only .pkl files first, then looks for .zip files if it needs more data
 def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1, mode="precomputed"):
     if mode == "precomputed":
         data_dir="EWOthello/data/othello_synthetic_with_board_states"
@@ -57,7 +58,7 @@ def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1,
     else:
         pickle_files = filenames[:num_datasets_to_load]
     
-    print("Loading games...")
+    print("\nLoading games...")
     bar = tqdm(pickle_files)
     for filename in bar:
         with open(f"{data_dir}/{filename}", "rb") as handle:
