@@ -218,7 +218,7 @@ if __name__=="__main__":
 
     probe = torch.load("trained_probes/08_22_test.pkl", map_location=device)
     test_dataset, _ = load_probe_datasets_automatic(1000, 1)
-    probe.after_eval_training(test_dataset, "trained_probes/08_22_test_choice_probe_eval.txt")
+    probe.after_training_eval(test_dataset, "trained_probes/08_22_test_choice_probe_eval.txt")
 
     """ for mode in ["precomputed", "not precomputed"]:
         print(f"Training in {mode} mode.")
