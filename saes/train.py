@@ -80,7 +80,7 @@ class L1_Choice_Trainer:
 
     def train_L1_probe(self):
         train_dataset, test_dataset = load_probe_datasets_automatic(train_size=self.L1_training_params.num_train_data, test_size=self.L1_training_params.num_test_data)
-        self.L1_probe.train_model(train_dataset, test_dataset, learning_rate=self.L1_training_params.lr, report_every_n_data=self.L1_training_params.report_every_n_data)
+        self.L1_probe.train_model(train_dataset, test_dataset, num_epochs=self.L1_training_params.num_epochs, learning_rate=self.L1_training_params.lr, report_every_n_data=self.L1_training_params.report_every_n_data)
         date_prefix=datetime.today().strftime("%m_%d")
         torch.save(self.L1_probe, f"{self.save_dir}/{date_prefix}_{self.save_name}_L1_probe.pkl")
 
