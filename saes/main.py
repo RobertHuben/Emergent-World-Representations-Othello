@@ -211,7 +211,7 @@ if __name__=="__main__":
 
     sae = torch.load(sae_location, map_location=device)
     sae_to_probe = SAEforProbing(sae)
-    train_params = TrainingParams(num_train_data=2000000)
+    train_params = TrainingParams(num_train_data=500000)
 
     for mode in ["precomputed", "not precomputed"]:
         print(f"Training in {mode} mode.")
