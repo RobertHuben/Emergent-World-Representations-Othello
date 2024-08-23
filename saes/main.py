@@ -67,71 +67,16 @@ def gated_training_sweep(sparsity_coeff_list:list, type_list:list, num_features_
                 print(f"\nBeginning training of {sae_name}.")
                 train_and_test_sae(sae, sae_name)
 
-def L1_probe_sweep(sae_location:str, sparsity_coeff_list:list):
-    sae = torch.load(sae_location, map_location=device)
-    sae_name = sae_location.split('/')[-1][:-4]
-    sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000) #change this back to 1000000 when done testing
-    for coeff in sparsity_coeff_list:
-        probe_name = f"L1_probe___sae={sae_name}___coeff={coeff}"
-        probe = L1_Sparse_Probe(sae_to_probe, sparsity_coeff=coeff)
-        print(f"Training {probe_name}.\n")
-        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
-
-def without_topk_probe_sweep(sae_location:str, params_list:list):
-    sae = torch.load(sae_location, map_location=device)
-    sae_name = sae_location.split('/')[-1][:-4]
-    sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
-    for (k, coeff) in params_list:
-        probe_name = f"without_topk_probe___sae={sae_name}___k={k}_coeff={coeff}"
-        probe = Without_Topk_Sparse_Probe(sae_to_probe, k=k, sparsity_coeff=coeff)
-        print(f"Training {probe_name}.\n")
-        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
-
-def leaky_topk_probe_sweep(sae_location:str, params_list:list):
-    sae = torch.load(sae_location, map_location=device)
-    sae_name = sae_location.split('/')[-1][:-4]
-    sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
-    for (k, epsilon) in params_list:
-        probe_name = f"leaky_topk_probe___sae={sae_name}___k={k}_eps={epsilon}"
-        probe = Leaky_Topk_Probe(sae_to_probe, k=k, epsilon=epsilon)
-        print(f"Training {probe_name}.\n")
-        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
-
-def k_annealing_probe_sweep(sae_location:str, params_list:list):
-    sae = torch.load(sae_location, map_location=device)
-    sae_name = sae_location.split('/')[-1][:-4]
-    sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=2000000)
-    for (epsilon, k_start, before_anneal_proportion, k_end, after_anneal_proportion) in params_list:
-        probe_name = f"k_anneal_probe___sae={sae_name}___eps={epsilon}_kstart={k_start}_before={before_anneal_proportion}_kend={k_end}_after={after_anneal_proportion}"
-        probe = K_Annealing_Probe(sae_to_probe, epsilon=epsilon, k_start=k_start, before_anneal_proportion=before_anneal_proportion, k_end=k_end, after_anneal_proportion=after_anneal_proportion)
-        print(f"Training {probe_name}.\n")
-        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
-
-def L1_gated_probe_sweep(sae_location:str, params_list:list):
-    sae = torch.load(sae_location, map_location=device)
-    sae_name = sae_location.split('/')[-1][:-4]
-    sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
-    for coeff, init in params_list:
-        probe_name = f"gated_L1_probe___sae={sae_name}___coeff={coeff}_init={init}"
-        probe = L1_Gated_Probe(sae_to_probe, sparsity_coeff=coeff, init_type=init)
-        print(f"Training {probe_name}.\n")
-        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
-
-def gated_k_annealing_probe_sweep(sae_location:str, params_list:list):
-    sae = torch.load(sae_location, map_location=device)
-    sae_name = sae_location.split('/')[-1][:-4]
-    sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=2000000)
-    for (epsilon, k_start, before_anneal_proportion, k_end, after_anneal_proportion) in params_list:
-        probe_name = f"gated_k_anneal_probe___sae={sae_name}___eps={epsilon}_kstart={k_start}_before={before_anneal_proportion}_kend={k_end}_after={after_anneal_proportion}"
-        probe = K_Annealing_Gated_Probe(sae_to_probe, epsilon=epsilon, k_start=k_start, before_anneal_proportion=before_anneal_proportion, k_end=k_end, after_anneal_proportion=after_anneal_proportion)
-        print(f"Training {probe_name}.\n")
-        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
+def L1_choice_probe_sweep(sae_locations:list, params_list:list):
+    train_dataset, test_dataset = load_probe_datasets_automatic(train_size=500000, test_size=1000)
+    for sae_location in sae_locations:
+        sae = torch.load(sae_location, map_location=device)
+        sae_name = sae_location.split('/')[-1][:-4]
+        sae_to_probe = SAEforProbing(sae)
+        for sparsity_coeff in params_list:
+            probe_name = f"L1_choice_probe_coeff={sparsity_coeff}__sae={sae_name}"
+            trainer = L1_Choice_Trainer(sae_to_probe, probe_name, train_dataset, test_dataset, sparsity_coeff=sparsity_coeff)
+            trainer.train()
 
 
 if __name__=="__main__":
@@ -144,126 +89,6 @@ if __name__=="__main__":
     #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     
-    """ sae = torch.load(sae_location, map_location=device)
-    sae_to_probe = SAEforProbing(sae)
-    for (layer_to_probe, input_dim) in [("residual", 512), ("hidden", 1024), ("reconstruction", 512)]:
-        probe = LinearProbe(model_to_probe=sae_to_probe, input_dim=input_dim, layer_to_probe=layer_to_probe)
-        train_params=TrainingParams(num_train_data=2000000)
-        sae_name = sae_location.split('/')[-1][:-4]
-        probe_name = f"linear_probe_layer={layer_to_probe}_sae={sae_name}"
-        train_probe(probe, probe_name, train_params=train_params, eval_after=True)
- """
-    
-    """ import pickle
-    import numpy as np
-    from EWOthello.data.othello import OthelloBoardState
-    data_dir = "EWOthello/data"
-    sequence_dir = "othello_synthetic"
-    probe_dir = "othello_synthetic_with_board_states"
-    partial_probe_dir ="othello_synthetic_with_board_state_info"
-
-    files_list = os.listdir(f"{data_dir}/{probe_dir}")
-    for n, filename in enumerate(files_list[:2]):
-        if ".pkl" in filename:
-            with open(f"{data_dir}/{probe_dir}/{filename}", "rb") as handle:
-                games = pickle.load(handle)
-            partial_info_games = []
-            for game in games:
-                move_seq = game[0]
-                state_seq = game[1]
-                partial_info_game = []
-                for position in range(64):
-                    position_state = [state[position] for state in state_seq]
-                    position_changes = []
-                    current_state = position_state[0]
-                    for move_index in range(len(position_state)):
-                        if current_state != position_state[move_index]:
-                            current_state = position_state[move_index]
-                            position_changes.append(move_index)
-                    partial_info_game.append(position_changes)
-                partial_info_games.append([move_seq, partial_info_game])
-            with open(f"{data_dir}/{partial_probe_dir}/{filename}", "wb") as handle:
-                pickle.dump(partial_info_games, handle)
-            print(f"\r{n+1} files finished out of 78.") """
-        
-
-    """ enemy_own_modifier = np.concatenate([np.ones((1,64))*(-1)**i for i in range(60)],axis=0)
-    os.makedirs(f"{data_dir}/{probe_dir}", exist_ok=True)
-    files_list = os.listdir(f"{data_dir}/{sequence_dir}")
-    for n, filename in enumerate(files_list[:21]):
-        filename_without_extension = filename.split(".")[0]
-        game_seqs_and_states = []
-        with open(f"{data_dir}/{sequence_dir}/{filename}", "rb") as handle:
-            game_sequences = pickle.load(handle)
-            num_games = len(game_sequences)
-            num_forfeited_moves = 0
-            for i, seq in enumerate(game_sequences):
-                state, forfeited_move = move_list_to_state_list(seq)
-                state = ((np.array(state) - 1.0) * enemy_own_modifier[:len(seq), :] + 1.0).tolist()
-                game_seqs_and_states.append([seq, state])
-                if forfeited_move:
-                    num_forfeited_moves += 1
-                if i % 1000 == 999:
-                    print(f"\r{i+1} games computed out of {num_games}; {num_forfeited_moves} have a move forfeit.", end="")
-        with open(f"{data_dir}/{probe_dir}/{filename_without_extension}_moves_and_game_states.pkl", "wb") as handle:
-            pickle.dump(game_seqs_and_states, handle)
-        print(f"\n{n+1} files finished out of 21.\n") """
-
-    """ sae = torch.load(sae_location, map_location=device)
-    sae_to_probe = SAEforProbing(sae)
-    train_params = TrainingParams(num_train_data=500000, num_epochs=4)
-
-    trainer = L1_Choice_Trainer(sae_to_probe, "test", sparsity_coeff=30)
-    trainer.train() """
-
-    probe = torch.load("trained_probes/08_22_test.pkl", map_location=device)
-    test_dataset, _ = load_probe_datasets_automatic(1000, 1)
-    probe.after_training_eval(test_dataset, "trained_probes/08_22_test_choice_probe_eval.txt")
-
-    """ for mode in ["precomputed", "not precomputed"]:
-        print(f"Training in {mode} mode.")
-        train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data, mode=mode)
-        for coeff in [20, 30]:
-            probe = L1_Sparse_Probe(sae_to_probe, coeff)
-            probe.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
- """
-
-    """ params_list = [27, 33, 36, 39, 42, 45, 48]
-    L1_probe_sweep(sae_location, params_list)
- """    
-
-    """ params_list = []
-    for coeff in [1, 10, 20]:
-        for k in [1, 2, 3]:
-            params_list.append((k, coeff))
-    without_topk_probe_sweep(sae_location, params_list)
- """
-
-    """ params_list = []
-    for k in [1, 2, 3]:
-        for epsilon in [0.005, 0.01]:
-            if (k, epsilon) == (1, 0.005):
-                continue
-            params_list.append((k, epsilon))
-    leaky_topk_probe_sweep(sae_location, params_list)
- """
-
-    """ params_list = []
-    for k_start in [1024]:
-        for before_anneal_proportion in [0.25]:
-            for k_end in [1, 2, 3, 4, 5, 6, 1024]:
-                after_anneal_proportion = 0.5 - before_anneal_proportion
-                epsilon = 0
-                params_list.append((epsilon, k_start, before_anneal_proportion, k_end, after_anneal_proportion))
-    gated_k_annealing_probe_sweep(sae_location, params_list)
- """
-    
-    """ params_list = []
-    for coeff in [10, 20, 30]:
-        for init in ["ones", "zeros", "random"]:
-            params_list.append((coeff, init))
-    L1_gated_probe_sweep(sae_location, params_list)
- """
     
     #test a constant probe
     """ sae = torch.load(sae_location, map_location=device)
@@ -272,19 +97,6 @@ if __name__=="__main__":
     probe = Constant_Probe(sae_to_probe, input_dim=1024)
     train_probe(probe, "constant_probe", train_params=training_params, eval_after=True) """
 
-    #L1_probe_location = "trained_probes/08_09_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff=30.pkl"
-    #L1_probe_location = "08_09_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff=30.pkl"
-
-    """ sae = torch.load(sae_location, map_location=device)
-    sae_to_probe = SAEforProbing(sae)
-    for init in [False, True]:
-        for coeff in [27, 33]:
-            L1_probe_location = f"08_14_L1_probe___sae=07_09_gated_tied_weights_no_aux_loss_coeff=1.5___coeff={coeff}.pkl"
-            L1_probe = torch.load(L1_probe_location, map_location=device)
-            save_name = f"L1_choice_probe_coeff={coeff}_init={init}"
-            trainer = L1_Choice_Trainer(sae_to_probe, save_name, L1_probe=L1_probe, sparsity_coeff=coeff, init_with_L1=init)
-            trainer.train() """
-    
     """ layer = 3
     coeff = 8
     num_features = 1024

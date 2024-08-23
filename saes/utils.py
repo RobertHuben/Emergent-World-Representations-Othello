@@ -30,50 +30,58 @@ def load_datasets_automatic(train_size:int,test_size:int, shuffle_seed=1) -> Cha
     test_othello.sequences=othello.sequences[train_size:train_size+test_size]
     return CharDataset(train_othello), CharDataset(test_othello)
 
-#fix so that it collects only .pkl files first, then looks for .zip files if it needs more data
 def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1, mode="precomputed"):
     if mode == "precomputed":
         data_dir="EWOthello/data/othello_synthetic_with_board_states"
     else:
         data_dir="EWOthello/data/othello_synthetic"
-    num_datasets_to_load = (test_size+train_size)//50000 + 1
+    total_data_needed = round((test_size+train_size) * 1.001)
     games = []
     filenames = os.listdir(data_dir)
-    if mode == "precomputed":
-        print("Collecting/unzipping data files...")
-        pickle_files = []
-        for filename in filenames:
-            if filename[-4:] == ".zip":
-                if not (filename[:-4] + ".pkl") in filenames:
-                    with zipfile.ZipFile(f"{data_dir}/{filename}","r") as zip_ref:
-                        zip_ref.extractall(data_dir)
-                    pickle_files.append(filename[:-4] + ".pkl")
-                    print(f"\r{len(pickle_files)}/{num_datasets_to_load} files collected/unzipped.", end="")
-            else:
-                assert filename[-4:] == ".pkl", f"Found file {filename} in data directory that is not a .pkl or .zip file."
-                pickle_files.append(filename)
-                print(f"\r{len(pickle_files)}/{num_datasets_to_load} files collected/unzipped.", end="")
-            if len(pickle_files) == num_datasets_to_load:
-                break
-    else:
-        pickle_files = filenames[:num_datasets_to_load]
-    
-    print("\nLoading games...")
-    bar = tqdm(pickle_files)
-    for filename in bar:
+    print("Collecting, unzipping, and loading data files...")
+    pickle_files = []
+    zip_files = []
+    for filename in filenames:
+        if filename[-4:] == ".pkl":
+            pickle_files.append(filename)
+        elif filename[-4:] == ".zip":
+            zip_files.append(filename)
+    print("Loading previously-unzipped files...")
+    finished_loading = False
+    for filename in pickle_files:
         with open(f"{data_dir}/{filename}", "rb") as handle:
             g = pickle.load(handle)
             games.extend(g)
+        print(f"\r{len(games)} games loaded out of {total_data_needed}", end="")
+        if len(games) >= total_data_needed:
+            finished_loading = True
+            break
+    if not finished_loading:
+        print("\nUnzipping and loading zipped files...")
+        for filename in zip_files:
+            with zipfile.ZipFile(f"{data_dir}/{filename}","r") as zip_ref:
+                zip_ref.extractall(data_dir)
+            with open(f"{data_dir}/{filename}", "rb") as handle:
+                g = pickle.load(handle)
+                games.extend(g)
+            print(f"\r{len(games)} games loaded out of {total_data_needed}", end="")
+            if len(games) >= total_data_needed:
+                finished_loading = True
+                break
     
-    print("Deduplicating...")
+    print("\nDeduplicating...")
     games.sort()
     games = [k for k, _ in itertools.groupby(games)]
     print(f"Deduplicating finished with {len(games)} games left")
 
     random.seed(shuffle_seed)
     random.shuffle(games)
-    train_games = games[:train_size]
-    test_games = games[train_size:train_size+test_size]
+    test_games = games[:test_size]
+    if finished_loading:
+        train_games = games[test_size:train_size+test_size]
+    else:
+        train_games = games[test_size:]
+
     if mode == "precomputed":
         return ProbeDatasetPrecomputed(train_games), ProbeDatasetPrecomputed(test_games)
     else:

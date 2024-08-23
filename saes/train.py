@@ -47,8 +47,11 @@ def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingPara
     torch.save(sae, f"{save_dir}/{date_prefix}_{save_name}.pkl")
     return sae
 
-def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=default_train_params, save_dir="trained_probes", eval_after=True):
-    train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
+def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=default_train_params, dataset_pair=None, save_dir="trained_probes", eval_after=True):
+    if dataset_pair:
+        train_dataset, test_dataset = dataset_pair
+    else:
+        train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
     probe.train_model(train_dataset, test_dataset, num_epochs=train_params.num_epochs, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
 
     date_prefix=datetime.today().strftime("%m_%d")
@@ -61,13 +64,12 @@ def train_probe(probe:LinearProbe, save_name:str, train_params:TrainingParams=de
     return probe
 
 class L1_Choice_Trainer:
-    def __init__(self, sae_to_probe:SAEforProbing, save_name:str, save_dir="trained_probes", L1_probe=None, sparsity_coeff=None, L1_training_params=TrainingParams(num_train_data=500000, num_epochs=2), choice_training_params=TrainingParams(num_train_data=500000, num_epochs=4), init_with_L1=True, bound=0.01, bound_type="absolute"):
+    def __init__(self, sae_to_probe:SAEforProbing, save_name:str, train_dataset, test_dataset, save_dir="trained_probes", L1_probe=None, sparsity_coeff=None, num_L1_epochs=2, num_choice_epochs=4, bound=0.01, bound_type="absolute"):
         self.sae_to_probe = sae_to_probe
         self.save_name = save_name
         self.save_dir = save_dir
-        self.choice_training_params = choice_training_params
-        self.L1_training_params = L1_training_params
-        self.init_with_L1 = init_with_L1
+        self.choice_epochs = num_choice_epochs
+        self.L1_epochs = num_L1_epochs
         self.bound = bound
         self.bound_type = bound_type
         if L1_probe == None:
@@ -77,25 +79,24 @@ class L1_Choice_Trainer:
             self.L1_probe = L1_probe
             self.L1_probe_trained = True
 
+        self.train_dataset = train_dataset
+        self.test_dataset = test_dataset
+
     def train_L1_probe(self):
-        train_dataset, test_dataset = load_probe_datasets_automatic(train_size=self.L1_training_params.num_train_data, test_size=self.L1_training_params.num_test_data)
-        self.L1_probe.train_model(train_dataset, test_dataset, num_epochs=self.L1_training_params.num_epochs, learning_rate=self.L1_training_params.lr, report_every_n_data=self.L1_training_params.report_every_n_data)
-        date_prefix=datetime.today().strftime("%m_%d")
-        os.makedirs(self.save_dir, exist_ok=True)
-        torch.save(self.L1_probe, f"{self.save_dir}/{date_prefix}_{self.save_name}_L1_probe.pkl")
+        train_probe(self.L1_probe, f"{self.save_name}_L1_probe", TrainingParams(num_epochs=self.choice_epochs), (self.train_dataset, self.test_dataset), self.save_dir, eval_after=False)
 
         abs_weights = torch.abs(self.L1_probe.linear.weight)
         top5_features = torch.topk(abs_weights, k=5, dim=1).indices
         top5_weights = self.L1_probe.linear.weight.gather(1, top5_features)
+        date_prefix=datetime.today().strftime("%m_%d")
         with open(f"{self.save_dir}/{date_prefix}_{self.save_name}_L1_probe_eval.txt", 'w') as f:
             f.write(f"\nTop 5 features by board position and class:\n{top5_features.reshape((8, 8, 3, 5))}\n")
             f.write(f"\nTop 5 weights by board position and class:\n{top5_weights.reshape((8, 8, 3, 5))}")
 
     def initialize_choice_probe(self):
         self.chosen_features_list = []
-        if self.init_with_L1:
-            initial_bias = self.L1_probe.linear.bias
-            initial_weights = []
+        initial_bias = self.L1_probe.linear.bias
+        initial_weights = []
         sparse_weights = self.L1_probe.linear.weight.reshape(64, 3, -1)
         for position in range(64):
             max_abs_feature_weights = torch.abs(sparse_weights[position]).max(dim=0).values
@@ -106,16 +107,12 @@ class L1_Choice_Trainer:
                 bound = max_abs_weight * self.bound
             feature_indices = torch.nonzero(max_abs_feature_weights >= bound).flatten()
             self.chosen_features_list.append(feature_indices.flatten())
-            if self.init_with_L1:
-                initial_weights.append(sparse_weights[position, :, feature_indices])
+            initial_weights.append(sparse_weights[position, :, feature_indices])
 
-        if self.init_with_L1:
-            self.choice_probe = Pre_Chosen_Features_Gated_Probe(self.sae_to_probe, self.chosen_features_list, initial_weights=initial_weights, initial_bias=initial_bias)
-        else:
-            self.choice_probe = Pre_Chosen_Features_Gated_Probe(self.sae_to_probe, self.chosen_features_list)
-
+        self.choice_probe = Pre_Chosen_Features_Gated_Probe(self.sae_to_probe, self.chosen_features_list, initial_weights=initial_weights, initial_bias=initial_bias)
+        
     def train_choice_probe(self):
-        train_probe(self.choice_probe, self.save_name, self.choice_training_params, self.save_dir, eval_after=True)
+        train_probe(self.choice_probe, f"{self.save_name}_choice_probe", TrainingParams(num_epochs=self.choice_epochs), (self.train_dataset, self.test_dataset), self.save_dir)
 
     def train(self):
         if not self.L1_probe_trained:
