@@ -61,7 +61,7 @@ def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1,
         for filename in zip_files:
             with zipfile.ZipFile(f"{data_dir}/{filename}","r") as zip_ref:
                 zip_ref.extractall(data_dir)
-            with open(f"{data_dir}/{filename}", "rb") as handle:
+            with open(f"{data_dir}/{filename[:-4]}.pkl", "rb") as handle:
                 g = pickle.load(handle)
                 games.extend(g)
             print(f"\r{len(games)} games loaded out of {total_data_needed}", end="")
