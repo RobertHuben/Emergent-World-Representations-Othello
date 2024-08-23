@@ -75,6 +75,7 @@ def L1_choice_probe_sweep(sae_locations:list, params_list:list, train_size=50000
         sae_to_probe = SAEforProbing(sae)
         for sparsity_coeff in params_list:
             probe_name = f"L1_choice_probe_coeff={sparsity_coeff}__sae={sae_name}"
+            print(f"Beginning training of {probe_name}")
             trainer = L1_Choice_Trainer(sae_to_probe, probe_name, train_dataset, test_dataset, sparsity_coeff=sparsity_coeff)
             trainer.train()
 
