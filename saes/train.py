@@ -98,6 +98,7 @@ class L1_Choice_Trainer:
         initial_bias = self.L1_probe.linear.bias
         initial_weights = []
         sparse_weights = self.L1_probe.linear.weight.reshape(64, 3, -1)
+        num_features_chosen = 0
         for position in range(64):
             max_abs_feature_weights = torch.abs(sparse_weights[position]).max(dim=0).values
             if self.bound_type == "absolute":
@@ -108,7 +109,9 @@ class L1_Choice_Trainer:
             feature_indices = torch.nonzero(max_abs_feature_weights >= bound).flatten()
             self.chosen_features_list.append(feature_indices.flatten())
             initial_weights.append(sparse_weights[position, :, feature_indices])
+            num_features_chosen += feature_indices.numel()
 
+        print(f"Average number of features chosen per position: {num_features_chosen/64}")
         self.choice_probe = Pre_Chosen_Features_Gated_Probe(self.sae_to_probe, self.chosen_features_list, initial_weights=initial_weights, initial_bias=initial_bias)
         
     def train_choice_probe(self):
