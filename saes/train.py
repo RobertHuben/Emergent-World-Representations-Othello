@@ -83,7 +83,7 @@ class L1_Choice_Trainer:
         self.test_dataset = test_dataset
 
     def train_L1_probe(self):
-        train_probe(self.L1_probe, f"{self.save_name}_L1_probe", TrainingParams(num_epochs=self.choice_epochs), (self.train_dataset, self.test_dataset), self.save_dir, eval_after=False)
+        train_probe(self.L1_probe, f"{self.save_name}_L1_probe", TrainingParams(num_epochs=self.L1_epochs), (self.train_dataset, self.test_dataset), self.save_dir, eval_after=False)
 
         abs_weights = torch.abs(self.L1_probe.linear.weight)
         top5_features = torch.topk(abs_weights, k=5, dim=1).indices

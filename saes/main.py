@@ -67,8 +67,8 @@ def gated_training_sweep(sparsity_coeff_list:list, type_list:list, num_features_
                 print(f"\nBeginning training of {sae_name}.")
                 train_and_test_sae(sae, sae_name)
 
-def L1_choice_probe_sweep(sae_locations:list, params_list:list):
-    train_dataset, test_dataset = load_probe_datasets_automatic(train_size=500000, test_size=1000)
+def L1_choice_probe_sweep(sae_locations:list, params_list:list, train_size=500000):
+    train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_size, test_size=1000)
     for sae_location in sae_locations:
         sae = torch.load(sae_location, map_location=device)
         sae_name = sae_location.split('/')[-1][:-4]
@@ -112,6 +112,12 @@ if __name__=="__main__":
     print(f"\nBeginning training of {sae_name}.")
     train_and_test_sae(sae, sae_name) """
     
+    test_train_size = 1000
+    full_train_size = 500000
+    sae_locations = [sae_location]
+    coeffs = [21, 24, 27, 30, 33, 36, 39]
+    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size)
+
     """ filename_list = os.listdir("trained_models")
     for sae_filename in filename_list:
         if sae_filename[-3:] == "txt":

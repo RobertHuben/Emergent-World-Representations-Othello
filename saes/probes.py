@@ -88,8 +88,6 @@ class ProbeDataset(Dataset):
         chars = sorted(list(set(list(itertools.chain.from_iterable(games)))) + [-100])
         self.char_to_index = {ch: i for i, ch in enumerate(chars)}
 
-        self.num_forfeited_moves = 0
-
     def __len__(self):
         return len(self.games)
 
@@ -102,8 +100,6 @@ class ProbeDataset(Dataset):
             game_length = len(move_seq)
             state_seq, forfeited_move = move_list_to_state_list(move_seq)
             state_seq = ((np.array(state_seq) - 1.0) * enemy_own_modifier[:game_length, :] + 1.0).tolist()
-            if forfeited_move:
-                self.num_forfeited_moves += 1
 
             if game_length < self.max_game_length:
                 padding_length = self.max_game_length - game_length
@@ -114,66 +110,6 @@ class ProbeDataset(Dataset):
 
         return torch.tensor(move_indices[:-1], dtype=torch.long), torch.tensor(state_seq[:-1], dtype=torch.long) #I don't know why these datatypes, just copying previous code
     
-def states_partial_info_to_state_list(position_changes):
-    contents_by_position =[]
-    for position in range(64):
-        r = position // 8
-        c = position % 8
-        if r in [3, 4] and c in [3, 4]:
-            if r == c:
-                current_state = -1
-            else:
-                current_state = 1
-        else:
-            current_state = 0
-        
-        this_position_contents = np.array([current_state]*60)
-        for i, change_index in enumerate(position_changes[position]):
-            if current_state == 0:
-                current_state = -1**(change_index%2)
-            else:
-                current_state = current_state * -1
-            if i+1 < len(position_changes[position]):
-                next_index = position_changes[position][i+1]
-            else:
-                next_index = 60
-            this_position_contents[change_index:next_index] = current_state
-        contents_by_position.append(this_position_contents)
-    return np.stack(contents_by_position, axis=1).tolist() #check that this is correct axis
-
-
-
-
-class ProbeDatasetPartiallyPrecomputed(Dataset):
-    def __init__(self, games:list):
-        self.games = games
-        
-        self.max_game_length = max([len(game_seq) for game_seq in games])
-        chars = sorted(list(set(list(itertools.chain.from_iterable(games)))) + [-100])
-        self.char_to_index = {ch: i for i, ch in enumerate(chars)}
-
-        self.num_forfeited_moves = 0
-
-    def __len__(self):
-        return len(self.games)
-
-    def __getitem__(self, index):
-        game = self.games[index]
-        move_seq = game[0]
-        board_states_info = game[1]
-        game_length = len(move_seq)
-        state_seq = states_partial_info_to_state_list(board_states_info)
-        state_seq = ((np.array(state_seq) - 1.0) * enemy_own_modifier[:game_length, :] + 1.0).tolist()
-
-        if game_length < self.max_game_length:
-            padding_length = self.max_game_length - game_length
-            move_seq += [-100] * padding_length
-            state_seq += [[-100] * 64 for i in range(padding_length)]
-        move_indices = [self.char_to_index[char] for char in move_seq]
-
-        return torch.tensor(move_indices[:-1], dtype=torch.long), torch.tensor(state_seq[:-1], dtype=torch.long) #I don't know why these datatypes, just copying previous code
-
-
 class ProbeDatasetPrecomputed(Dataset):
     def __init__(self, games:list):
         game_sequences = [game[0] for game in games]
