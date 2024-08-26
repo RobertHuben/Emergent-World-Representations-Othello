@@ -115,7 +115,7 @@ if __name__=="__main__":
     
     test_train_size = 1000
     full_train_size = 500000
-    sae_locations = os.listdir("trained_probes/for_analysis")
+    sae_locations = os.listdir("trained_models/for_analysis")
     coeffs = [21, 24, 27, 30, 33, 36, 39]
     L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size)
 
