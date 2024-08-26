@@ -115,9 +115,10 @@ if __name__=="__main__":
     
     test_train_size = 1000
     full_train_size = 500000
-    sae_locations = os.listdir("trained_models/for_analysis")
+    sae_filenames = os.listdir("trained_models/for_analysis")
+    sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
     coeffs = [21, 24, 27, 30, 33, 36, 39]
-    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size)
+    L1_choice_probe_sweep(sae_locations, coeffs, train_size=test_train_size)
 
     """ filename_list = os.listdir("trained_models")
     for sae_filename in filename_list:
