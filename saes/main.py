@@ -88,7 +88,7 @@ if __name__=="__main__":
     #gated_training_sweep([60, 100, 120, 150], ["standard"])
 
     #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
-    sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
+    #sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     
     
     #test a constant probe
@@ -98,26 +98,26 @@ if __name__=="__main__":
     probe = Constant_Probe(sae_to_probe, input_dim=1024)
     train_probe(probe, "constant_probe", train_params=training_params, eval_after=True) """
 
-    """ layer = 3
-    coeff = 8
+    layer = 3
+    coeff = 1.7
     num_features = 1024
     gpt = load_pre_trained_gpt(probe_layer=layer)
     sae = SAEAnthropic(gpt, num_features, coeff)
-    sae_name = f"anthropic_sae_coeff={coeff}_features={num_features}_layer={layer}"
+    sae_name = f"anthropic_sae_coeff={coeff}_features={num_features}"
     print(f"\nBeginning training of {sae_name}.")
     train_and_test_sae(sae, sae_name)
     
-    k = 100
+    """ k = 100
     sae = Leaky_Topk_SAE(gpt, num_features, epsilon=0, k=k)
     sae_name = f"topk_sae_k={100}_features={num_features}_layer={layer}"
     print(f"\nBeginning training of {sae_name}.")
     train_and_test_sae(sae, sae_name) """
     
-    test_train_size = 1000
+    """ test_train_size = 1000
     full_train_size = 500000
     sae_locations = [sae_location]
     coeffs = [21, 24, 27, 30, 33, 36, 39]
-    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size)
+    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size) """
 
     """ filename_list = os.listdir("trained_models")
     for sae_filename in filename_list:
