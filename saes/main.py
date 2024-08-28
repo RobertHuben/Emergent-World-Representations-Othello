@@ -122,7 +122,7 @@ if __name__=="__main__":
 
     sae_filenames = os.listdir("trained_models/for_analysis")
     sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
-    train_dataset, test_dataset = load_probe_datasets_automatic(1000, 1000)
+    train_dataset, test_dataset = load_probe_datasets_automatic(500000, 1000)
     for n, sae_filename in enumerate(sae_filenames):
         if "gated_tied" in sae_filename:
             continue
