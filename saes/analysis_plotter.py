@@ -273,6 +273,39 @@ def board_state_frequency_vs_smd(sae, include_aurocs=False, sae_title=None):
     plt.savefig(f"{save_location}.png")
     plt.close()
 
+def plot_features_used_vs_accuracy(data:dict, save_name=None):
+    fig, (main, full_features) = plt.subplots(1, 2, sharey=True, gridspec_kw={'width_ratios': [15, 1]})
+    for sae_type, data_list in data.items():
+        data_list.sort()
+        features = [datum[0] for datum in data_list]
+        accuracies = [datum[1] for datum in data_list]
+        """ outlier_num_features = []
+        outlier_accuracies = []
+        for i, num_features in enumerate(features):
+            if num_features > 10:
+                outlier_num_features.append(num_features)
+                features.pop(i)
+                outlier_accuracies.append(accuracies.pop(i))
+        full_features.scatter(outlier_num_features, outlier_accuracies, label=sae_type) """
+        main.plot(features, accuracies, "-o", label=sae_type)
+        full_features.plot(features, accuracies, "-o", label=sae_type)
+    main.spines.right.set_visible(False)
+    full_features.spines.left.set_visible(False)
+    main.set(xlabel="Number of features used", ylabel="Probe Accuracy")
+    main.set_xlim(1.5, 5.2)
+    plt.xticks(np.arange(1024, 1025, step=1))
+    full_features.set_xlim(1023.85, 1024.15)
+    full_features.tick_params(left=False)
+    fig.suptitle("Accuracy of L1-choice linear probes trained on various SAEs")
+    main.legend(title="SAE Types")
+    if save_name:
+        plt.savefig(f"analysis_results/{save_name}.png")
+        plt.show()
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
 if __name__=="__main__":    
     sae_locations=[ 
                     # 'trained_models/07_10_top_k_sae_1024_features_100_sparsity.pkl.pkl',
