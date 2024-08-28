@@ -21,15 +21,25 @@ def compute_feature_dip_scores(sae):
 def calculate_mcs_between_two_saes(sae_1, sae_2, eps=1e-6):
     '''
     computes the maximum cosine similarity between all of sae_1's features and sae_2's features
-    the maximum is
+    sae_1 has features of shape (D,N1)
+    sae_2 has features of shape (D,N2)
+    returned score is of shape (N2)
+    ie for each feature in sae_2, returns its cosine similarity with the most-similar sae_1 feature
     '''
-    sae_1_encoder=sae_1.encoder
-    sae_2_encoder=sae_2.encoder
-    sae_1_encoder_directions=sae_1_encoder/(sae_1_encoder.norm(dim=0)+eps)
-    sae_2_encoder_directions=sae_2_encoder/(sae_2_encoder.norm(dim=0)+eps)
-    cosine_similarities=sae_1_encoder_directions.T @sae_2_encoder_directions
-    mcs=cosine_similarities.max(dim=0).values
+    cos_sims=cosine_similarities(sae_1.encoder, sae_2.encoder, eps=eps)
+    mcs=cos_sims.max(dim=0).values
     return mcs
+
+def cosine_similarities(tensor_1:torch.Tensor, tensor_2:torch.Tensor, eps=1e-6):
+    '''
+    tensor_1 is of shape (D,N1)
+    tensor_2 is of shape (D,N2)
+    returns a tensor of shape (N1,N2)
+    '''
+    sae_1_encoder_directions=tensor_1/(tensor_1.norm(dim=0)+eps)
+    sae_2_encoder_directions=tensor_2/(tensor_2.norm(dim=0)+eps)
+    cos_sims=sae_1_encoder_directions.T @ sae_2_encoder_directions
+    return cos_sims
 
 @torch.inference_mode()
 def compute_feature_frequency(sae):
