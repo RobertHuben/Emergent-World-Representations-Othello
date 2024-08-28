@@ -8,7 +8,9 @@ from abc import abstractmethod
 import torch
 from torch.nn import functional as F
 import numpy as np
+import pickle
 import math
+import itertools
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from EWOthello.mingpt.dataset import CharDataset
@@ -18,28 +20,121 @@ from architectures import suppress_lower_activations
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
+eights = [[-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1]]
+def move_list_to_state_list(move_list:list):
+    board = np.zeros((8, 8))
+    board[3, 4] = 1
+    board[3, 3] = -1
+    board[4, 3] = 1
+    board[4, 4] = -1
+
+    state_list = []
+    forfeited_move = False
+    color = 1
+    for move in move_list:
+        r, c = move // 8, move % 8
+        assert board[r, c] == 0, "Illegal move!  There's already a piece there."
+        tbf = []
+        for direction in eights:
+            buffer = []
+            cur_r, cur_c = r, c
+            while 1:
+                cur_r, cur_c = cur_r + direction[0], cur_c + direction[1]
+                if cur_r < 0 or cur_r > 7 or cur_c < 0 or cur_c > 7:
+                    break
+                if board[cur_r, cur_c] == 0:
+                    break
+                elif board[cur_r, cur_c] == color:
+                    tbf.extend(buffer)
+                    break
+                else:
+                    buffer.append([cur_r, cur_c])
+        if len(tbf) == 0:  # means one hand forfeited move (unless this is an illegal move)
+            forfeited_move = True
+            color *= -1
+            for direction in eights:
+                buffer = []
+                cur_r, cur_c = r, c
+                while 1:
+                    cur_r, cur_c = cur_r + direction[0], cur_c + direction[1]
+                    if cur_r < 0 or cur_r > 7 or cur_c < 0 or cur_c > 7:
+                        break
+                    if board[cur_r, cur_c] == 0:
+                        break
+                    elif board[cur_r, cur_c] == color:
+                        tbf.extend(buffer)
+                        break
+                    else:
+                        buffer.append([cur_r, cur_c])
+        assert len(tbf) > 0, "Illegal move!  No flipped pieces."
+
+        for ff in tbf:
+            board[ff[0], ff[1]] *= -1
+        board[r, c] = color
+        state_list.append((board+1).flatten().tolist())
+
+        color *= -1
+
+    return state_list, forfeited_move
+
+enemy_own_modifier = np.concatenate([np.ones((1,64))*(-1)**i for i in range(60)],axis=0)
+
 class ProbeDataset(Dataset):
-    def __init__(self, game_dataset:CharDataset):
-        self.game_dataset = game_dataset
-        self.enemy_own_modifier = np.concatenate([np.ones((1,64))*(-1)**i for i in range(59)],axis=0)
-    
+    def __init__(self, games:list):
+        self.games = games
+        self.computed_data = [False] * len(games)
+        
+        self.max_game_length = max([len(game_seq) for game_seq in games])
+        chars = sorted(list(set(list(itertools.chain.from_iterable(games)))) + [-100])
+        self.char_to_index = {ch: i for i, ch in enumerate(chars)}
+
     def __len__(self):
-        return len(self.game_dataset)
+        return len(self.games)
 
     def __getitem__(self, index):
-        x, _ = self.game_dataset[index]
-        tbf = [self.game_dataset.itos[_] for _ in x.tolist()]
-        valid_until = tbf.index(-100) if -100 in tbf else 999
+        datum = self.computed_data[index]
+        if datum:
+            move_indices, state_seq = datum
+        else:
+            move_seq = self.games[index]
+            game_length = len(move_seq)
+            state_seq, forfeited_move = move_list_to_state_list(move_seq)
+            state_seq = ((np.array(state_seq) - 1.0) * enemy_own_modifier[:game_length, :] + 1.0).tolist()
 
-        # Get the board state vectors
-        a = OthelloBoardState()
-        board_state = a.get_gt(tbf[:valid_until], "get_state")
-        board_state = (np.array(board_state) - 1.0) * self.enemy_own_modifier[:valid_until, :] + 1.0
-        board_state = torch.tensor(board_state, dtype=torch.float32).to(device)
-        if valid_until < len(tbf):
-            padding = -100*torch.ones(len(tbf)-valid_until, 64).to(device)
-            board_state = torch.cat((board_state, padding), 0)
-        return x, board_state.to(dtype=int)
+            if game_length < self.max_game_length:
+                padding_length = self.max_game_length - game_length
+                move_seq += [-100] * padding_length
+                state_seq += [[-100] * 64 for i in range(padding_length)]
+            move_indices = [self.char_to_index[char] for char in move_seq]
+            self.computed_data[index] = (move_indices, state_seq)
+
+        return torch.tensor(move_indices[:-1], dtype=torch.long), torch.tensor(state_seq[:-1], dtype=torch.long) #I don't know why these datatypes, just copying previous code
+    
+class ProbeDatasetPrecomputed(Dataset):
+    def __init__(self, games:list):
+        game_sequences = [game[0] for game in games]
+        
+        max_game_length = max([len(game_seq) for game_seq in game_sequences])
+        chars = sorted(list(set(list(itertools.chain.from_iterable(game_sequences)))) + [-100])
+        self.char_to_index = {ch: i for i, ch in enumerate(chars)}
+
+        self.data = []
+        for game in games:
+            game_seq, game_states = game[0], game[1]
+            game_length = len(game_seq)
+            if game_length < max_game_length:
+                padding_length = max_game_length - game_length
+                game_seq += [-100] * padding_length
+                game_states += [[-100] * 64 for i in range(padding_length)]
+            game_indices = [self.char_to_index[char] for char in game_seq]
+            self.data.append((game_indices[:-1], game_states[:-1])) #I think it is correct to take 1 off the end, since we shouldn't be predicting anything from the last move
+    
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        x, y = self.data[index]
+        return torch.tensor(x, dtype=torch.long), torch.tensor(y, dtype=torch.long) #I don't know why these datatypes, just copying previous code
 
 class SAEforProbing(torch.nn.Module):
     def __init__(self, sae:SAETemplate):
@@ -89,7 +184,7 @@ class LinearProbe(torch.nn.Module):
     def loss(self, logits, targets):
         return F.cross_entropy(logits.reshape(-1, 3), targets.reshape(-1), ignore_index=-100)
     
-    def train_model(self, train_dataset:CharDataset, eval_dataset:CharDataset, batch_size=64, num_epochs=1, report_every_n_data=500, learning_rate=1e-3, fixed_seed=1337):
+    def train_model(self, train_dataset:ProbeDataset, eval_dataset:ProbeDataset, batch_size=64, num_epochs=1, report_every_n_data=500, learning_rate=1e-3, fixed_seed=1337):
         '''
         performs a training loop on self, with printed evaluations
         '''
@@ -101,15 +196,12 @@ class LinearProbe(torch.nn.Module):
         step=0
         report_on_batch_number=report_every_n_data//batch_size
 
-        train_probe_dataset = ProbeDataset(train_dataset)
-        eval_probe_dataset = ProbeDataset(eval_dataset)
-
         self.training_prep(train_dataset=train_dataset, batch_size=batch_size, num_epochs=num_epochs)
 
         print(f"Beginning probe training on {device}!")
 
         for epoch in range(num_epochs):
-            train_dataloader=iter(torch.utils.data.DataLoader(train_probe_dataset, batch_size=batch_size, shuffle=True))
+            train_dataloader=iter(torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True))
             print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_data} games.")
             batch_count=0 #for testing
             for input_batch, label_batch in tqdm(train_dataloader):
@@ -124,11 +216,11 @@ class LinearProbe(torch.nn.Module):
                 optimizer.step()
 
                 if step % report_on_batch_number==0:
-                    self.print_evaluation(loss, eval_probe_dataset, step_number=step)
+                    self.print_evaluation(loss, eval_dataset, step_number=step)
 
                 self.after_step_update(step=step)
         else:
-            self.print_evaluation(train_loss=loss, eval_dataset=eval_probe_dataset, step_number="Omega")
+            self.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
         self.eval()
 
     def training_prep(self, train_dataset=None, batch_size=None, num_epochs=None):
@@ -171,27 +263,25 @@ class LinearProbe(torch.nn.Module):
         self.accuracy = self.accuracy_by_board_position.mean()
 
     def print_evaluation(self, train_loss, eval_dataset:ProbeDataset, step_number="N/A"):
-        if not isinstance(eval_dataset, ProbeDataset):
-            eval_dataset = ProbeDataset(eval_dataset)
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         test_loss=losses.mean()
         self.compute_accuracy(logits, targets)
         print_message=f"Train loss, test loss, accuracy after {self.num_data_trained_on} training games: {train_loss.item():.2f}, {test_loss:.3f}, {self.accuracy:.4f}"
         tqdm.write(print_message)
 
-    def after_training_eval(self, eval_dataset:ProbeDataset, save_location:str):
-        if not isinstance(eval_dataset, ProbeDataset):
-            eval_dataset = ProbeDataset(eval_dataset)
+    def after_training_eval(self, eval_dataset:ProbeDataset, save_location:str, weight=None):
+        if weight == None:
+            weight = self.linear.weight
         losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
         self.compute_accuracy(logits, targets)
-        abs_weights = torch.abs(self.linear.weight)
-        top4_features = torch.topk(abs_weights, k=4, dim=1).indices
-        top4_weights = self.linear.weight.gather(1, top4_features)
+        abs_weights = torch.abs(weight)
+        top5_features = torch.topk(abs_weights, k=5, dim=1).indices
+        top5_weights = weight.gather(1, top5_features)
         with open(save_location, 'a') as f:
             f.write(f"Average accuracy: {self.accuracy}\n")
             f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
-            f.write(f"\nTop 4 features by board position and class:\n{top4_features.reshape((8, 8, 3, 4))}\n")
-            f.write(f"\nTop 4 weights by board position and class:\n{top4_weights.reshape((8, 8, 3, 4))}")
+            f.write(f"\nTop 5 features by board position and class:\n{top5_features.reshape((8, 8, 3, 5))}\n")
+            f.write(f"\nTop 5 weights by board position and class:\n{top5_weights.reshape((8, 8, 3, 5))}")
 
 class Constant_Probe(LinearProbe):
     def __init__(self, model_to_probe: Module, input_dim: int):
@@ -204,24 +294,34 @@ class Constant_Probe(LinearProbe):
         return loss, logits
 
 class L1_Sparse_Probe(LinearProbe):
-    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float, normalize=False):
+    def __init__(self, model_to_probe: SAEforProbing, sparsity_coeff: float):
         input_dim = model_to_probe.sae.num_features
         super().__init__(model_to_probe, input_dim)
         self.sparsity_coeff = sparsity_coeff
-        self.normalize = normalize
 
     def forward(self, activations, targets):
-        if self.normalize:
-            normalized_weight = F.normalize(self.linear.weight, p=2, dim=1) #normalize rows, so that L1 term increases sparsity rather than just decreasing all weights
-            logits = activations @ normalized_weight.transpose(0, 1) + self.linear.bias
-        else: #don't normalize?
-            normalized_weight = self.linear.weight
-            logits = self.linear(activations)
+        logits = self.linear(activations)
         accuracy_loss = super().loss(logits, targets)
-        sparsity_loss = torch.abs(normalized_weight).mean()
+        sparsity_loss = torch.abs(self.linear.weight).mean()
         loss = accuracy_loss + self.sparsity_coeff * sparsity_loss
         return loss, logits
     
+    #for evaluating the weights for use in a choice probe
+    """ def print_evaluation(self, train_loss, eval_dataset: ProbeDataset, step_number="N/A"):
+        super().print_evaluation(train_loss, eval_dataset, step_number)
+        abs_weights = torch.abs(self.linear.weight.reshape((64, 3, -1)))
+        
+        max_weights = torch.max(abs_weights.reshape(64, -1), dim=-1).values
+        max_feature_weights = abs_weights.max(dim=1).values
+        num_features_chosen = torch.sum(max_feature_weights >= (max_weights.unsqueeze(-1) * 0.01))
+
+        top5_weights = torch.topk(abs_weights.reshape(8, 8, 3, -1), k=5, dim=-1)
+        with open("L1_training_top_weights.txt", "a") as f:
+            f.write(f"Number of features chosen after {step_number} steps: {num_features_chosen}; Average per position: {num_features_chosen/64}\n")
+            f.write(f"Top features after {step_number} steps:\n{top5_weights.indices}\n\n")
+            f.write(f"Top weights after {step_number} steps:\n{top5_weights.values}\n\n")
+ """
+
 class Without_Topk_Sparse_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, k: int, sparsity_coeff: float):
         input_dim = model_to_probe.sae.num_features
@@ -291,6 +391,72 @@ class K_Annealing_Probe(Leaky_Topk_Probe):
                 self.k = self.k_end
         return
     
+class Pre_Chosen_Features_Gated_Probe(LinearProbe):
+    #chosen_features_list is a list containing 64 lists containing feature indices
+    def __init__(self, model_to_probe: SAEforProbing, chosen_features_list: list, initial_weights=None, initial_bias=None):
+        Module.__init__(self)
+        self.model_to_probe = model_to_probe
+        self.layer_to_probe = "hidden"
+        self.num_data_trained_on=0
+        self.accuracy = None
+        self.accuracy_by_board_position = None
+
+        for param in model_to_probe.parameters():
+            param.requires_grad=False
+
+        max_features_per_position = max([feature_indices.shape[0] for feature_indices in chosen_features_list])
+        self.features_to_use_mask = torch.ones(64, 1, max_features_per_position).to(device)
+        padded_features_list = []
+
+        for position, feature_indices in enumerate(chosen_features_list):
+            num_unique_indices = feature_indices.shape[0]
+            places_to_pad = max_features_per_position - num_unique_indices
+            padded_features_list.append(torch.cat((feature_indices, torch.zeros(places_to_pad).to(device))))
+            self.features_to_use_mask[position, 0, num_unique_indices:] = torch.zeros(places_to_pad).to(device)
+            if initial_weights:
+                initial_weights[position] = torch.cat((initial_weights[position], torch.zeros((3, places_to_pad)).to(device)), dim=1)            
+        self.indices = torch.stack(padded_features_list).type(torch.int)
+
+        if initial_weights:
+            self.weight = torch.nn.Parameter(torch.stack(initial_weights))
+        else:
+            self.weight = torch.nn.Parameter(torch.randn((64, 3, max_features_per_position)).to(device) * self.features_to_use_mask)
+        if initial_bias != None:
+            self.bias = torch.nn.Parameter(initial_bias.reshape((64, 3)))
+        else:
+            self.bias = torch.nn.Parameter(torch.zeros(64, 3))
+
+    def forward(self, activations, targets):
+        chosen_activations = activations[:, :, self.indices]
+        #test
+        """ for batch in range(activations.shape[0]):
+            for move in range(activations.shape[1]):
+                for position in range(64):
+                    for index in range(self.weight.shape[-1]):
+                        assert torch.Tensor.isclose(chosen_activations[batch, move, position, index], activations[batch, move, self.indices[position, index]]) """
+        weight = self.weight*self.features_to_use_mask
+        logits = torch.einsum("ijk,...ik->...ij", weight, chosen_activations) + self.bias
+        #test
+        """ for batch in range(activations.shape[0]):
+            for move in range(activations.shape[1]):
+                for position in range(64):
+                    for clas in range(3):
+                        assert torch.abs(logits[batch, move, position, clas] - torch.sum(self.weight[position, clas] * chosen_activations[batch, move, position])) < 0.001 """
+        loss = super().loss(logits, targets)
+        return loss, logits
+    
+    def after_training_eval(self, eval_dataset:ProbeDataset, save_location:str):
+        losses, logits, targets=self.catenate_outputs_on_dataset(eval_dataset)
+        self.compute_accuracy(logits, targets)
+        features_used_per_position = (self.indices.reshape((8, 8, -1)) + 1) * self.features_to_use_mask.reshape((8, 8 ,-1)).type(torch.int) - 1
+        num_features_used_per_position = self.features_to_use_mask.sum(dim=-1).reshape((8, 8))
+        with open(save_location, 'a') as f:
+            f.write(f"Average accuracy: {self.accuracy}; Average number of features used per position: {num_features_used_per_position.mean()}\n")
+            f.write(f"Accuracies by board position:\n {self.accuracy_by_board_position}\n")
+            f.write(f"Number of features used by board position:\n {num_features_used_per_position}\n")
+            f.write(f"\nFeatures used by each board position:\n{features_used_per_position}\n")
+            f.write(f"\nWeights by board position and class:\n{self.weight.reshape((8, 8, 3, -1))}")
+
 class Gated_Probe(LinearProbe):
     def __init__(self, model_to_probe: SAEforProbing, init_type="ones"):
         Module.__init__(self)
