@@ -113,23 +113,21 @@ if __name__=="__main__":
     print(f"\nBeginning training of {sae_name}.")
     train_and_test_sae(sae, sae_name) """
     
-    test_train_size = 1000
+    """ test_train_size = 1000
     full_train_size = 500000
     sae_filenames = os.listdir("trained_models/for_analysis")
     sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
     coeffs = [21, 24, 27, 30, 33, 36, 39]
-    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size)
+    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size) """
 
-    """ filename_list = os.listdir("trained_models")
-    for sae_filename in filename_list:
-        if sae_filename[-3:] == "txt":
+    sae_filenames = os.listdir("trained_models/for_analysis")
+    sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
+    train_dataset, test_dataset = load_probe_datasets_automatic(500000, 1000)
+    for n, sae_filename in enumerate(sae_filenames):
+        if "gated_tied" in sae_filename:
             continue
-        sae = torch.load(f"trained_models/{sae_filename}", map_location=device)
-        sae_to_probe = SAEforProbing(sae)
         sae_name = sae_filename[:-4]
-        for coeff in [20, 25, 30, 35]:
-            save_name = f"L1_choice_probe_coeff={coeff}_sae={sae_name}"
-            print(f"Training {save_name}.")
-            trainer = L1_Choice_Trainer(sae_to_probe, save_name, sparsity_coeff=coeff)
-            trainer.train()
- """
+        sae = torch.load(sae_locations[n], map_location=device)
+        sae_to_probe = SAEforProbing(sae)
+        probe = LinearProbe(sae, input_dim=1024, layer_to_probe="hidden")
+        train_probe(probe, f"linear_probe_layer=hidden_sae={sae_name}", TrainingParams(num_epochs=2), dataset_pair=(train_dataset, test_dataset))
