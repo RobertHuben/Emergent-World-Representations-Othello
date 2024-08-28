@@ -130,4 +130,4 @@ if __name__=="__main__":
         sae = torch.load(sae_locations[n], map_location=device)
         sae_to_probe = SAEforProbing(sae)
         probe = LinearProbe(sae_to_probe, input_dim=1024, layer_to_probe="hidden")
-        train_probe(probe, f"linear_probe_layer=hidden_sae={sae_name}", TrainingParams(num_epochs=2), dataset_pair=(train_dataset, test_dataset))
+        train_probe(probe, f"linear_probe_layer=hidden_sae={sae_name}", TrainingParams(num_epochs=6), dataset_pair=(train_dataset, test_dataset))
