@@ -4,8 +4,12 @@ import math
 import numpy as np
 import seaborn as sns
 from matplotlib import pyplot as plt
+import diptest
+import re
 
-from utils import load_datasets_automatic
+from saes.utils import load_datasets_automatic
+from saes.analysis_metrics import compute_feature_frequency
+from saes.board_states import get_board_states
 from board_states import get_board_states
 from probes import Gated_Probe
 
@@ -182,7 +186,104 @@ def show_best_feature(sae, position_index, piece_class):
     _, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
     plot_feature_activations(sae, feature_to_use, position_index, test_dataset)
 
-if __name__=="__main__":
-    sae=torch.load("trained_models/top_k_sae_k_is_100.pkl", map_location=device)
-    show_best_feature(sae, position_index=1, piece_class=0)
+def plot_many_saes(prefix, dir="trained_models"):
+    suffix=".txt"
+    smd_expression='Number of SMD>2'
+    sparsity_expression='k (sparsity)'
+    num_features_expression='Number of features'
 
+    names=[]
+    smds=[]
+    sparsities=[]
+    num_features_list=[]
+
+    for file in os.listdir(dir):
+        if not file.startswith(prefix) or not file.endswith(suffix):
+            continue
+        contents=open(f"{dir}/{file}", 'r').read()
+        smd_line=[line for line in contents.split("\n") if line.strip().startswith(smd_expression)]
+        if smd_line:
+            smd=float(smd_line[0].split(": ")[1])
+        sparsity_line=[line for line in contents.split("\n") if line.strip().startswith(sparsity_expression)]
+        if sparsity_line:
+            sparsity=int(sparsity_line[0].split(": ")[1])
+        num_features_line=[line for line in contents.split("\n") if line.strip().startswith(num_features_expression)]
+        if num_features_line:
+            num_features=int(num_features_line[0].split(": ")[1])
+
+        names.append(file)
+        smds.append(smd)
+        sparsities.append(sparsity)
+        num_features_list.append(num_features)
+
+    unique_sparsities=sorted(list(set(sparsities)))
+    unique_num_features=sorted(list(set(num_features_list)))
+    data=np.zeros((len(unique_sparsities), len(unique_num_features)))
+    for smd, sparsity, num_feat in zip(smds, sparsities, num_features_list):
+        data[unique_sparsities.index(sparsity), unique_num_features.index(num_feat)]=smd
+    bar_width=.5/len(unique_sparsities)
+    for i, sparsity in enumerate(unique_sparsities):
+        plt.bar(np.arange(len(unique_num_features))+bar_width*i, data[i], bar_width, label=sparsity)
+    plt.xticks(ticks=range(len(unique_num_features)), labels=unique_num_features)
+    plt.xlabel("Num Features")
+    plt.savefig("Comparison.jpg")
+    return
+
+def plot_frequencies_vs_classifier_quality(sae):
+    frequencies=compute_feature_frequency(sae)
+    frequencies=torch.sort(frequencies).values
+
+    good_classifier_indices=torch.nonzero(sae.classifier_smds>2)[:,0].tolist()
+
+    plt.scatter(range(len(frequencies)), torch.sort(frequencies).values)
+    plt.scatter(good_classifier_indices, torch.sort(frequencies).values[good_classifier_indices])
+    return
+
+def board_state_frequency_vs_smd(sae, include_aurocs=False, sae_title=None):
+    smds=sae.classifier_smds.max(dim=0).values
+    board_state_frequencies=torch.zeros(smds.shape)
+    _, dataset = load_datasets_automatic(train_size=1, test_size=1000)
+    _, hidden_layers, __=sae.catenate_outputs_on_dataset(dataset, include_loss=False)
+
+    board_states= get_board_states(dataset)
+    board_states=sae.trim_to_window(board_states)
+    hidden_layers=hidden_layers.flatten(end_dim=-2)
+    board_states=board_states.flatten(end_dim=-2)
+    game_not_ended_mask=board_states[:,0]>-100
+    hidden_layers=hidden_layers[game_not_ended_mask]
+    board_states=board_states[game_not_ended_mask]
+    
+    for piece_class in range(3):
+        board_state_frequencies[:, piece_class]=(board_states==piece_class).mean(dim=0, dtype=float)
+    if include_aurocs:
+        sae.compute_all_aurocs(dataset)
+        best_aurocs=sae.classifier_aurocs.max(dim=0).values
+        plt.scatter(board_state_frequencies, best_aurocs)
+    else:
+        plt.scatter(board_state_frequencies, smds)
+    plt.xlabel("Board State Feature Frequency")
+    plt.ylabel("Best SMD")
+    plot_title="Frequency vs SMD for 64x3 board states and piece classes"
+    save_location="analysis_results/frequency_vs_smd"
+    if sae_title:
+        reduced_sae_title=sae_title.split("/")[-1].split(".")[0]
+        plot_title+=f"\nSAE: {reduced_sae_title}"
+        save_location+="_"+reduced_sae_title
+    plt.title(plot_title)
+    plt.savefig(f"{save_location}.png")
+    plt.close()
+
+if __name__=="__main__":    
+    sae_locations=[ 
+                    # 'trained_models/07_10_top_k_sae_1024_features_100_sparsity.pkl.pkl',
+                    # 'trained_models/07_10_top_k_sae_1024_features_150_sparsity.pkl.pkl',
+                    # 'trained_models/07_11_top_k_sae_1024_features_200_sparsity.pkl.pkl',
+                    # 'trained_models/07_12_saeAnthropic_1024_features_4_sparsity.pkl',
+                    'trained_models/07_30_saeAnthropic_layer_3_1024_features_1_sparsity.pkl',
+                    'trained_models/07_30_saeAnthropic_layer_4_1024_features_1_sparsity.pkl',
+                    'trained_models/07_30_saeAnthropic_layer_5_1024_features_1_sparsity.pkl',
+    ]
+    for sae_location in sae_locations:
+        sae=torch.load(sae_location, map_location=device)
+        board_state_frequency_vs_smd(sae, include_aurocs=False, sae_title=sae_location)
+    plt.show()

@@ -1,11 +1,10 @@
 import torch 
 from torch.nn import functional as F
 import logging
-
 import numpy as np
 
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
-from sae_template import SAETemplate
+from saes.sae_template import SAETemplate
 
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
@@ -15,15 +14,7 @@ class SAEAnthropic(SAETemplate):
     def __init__(self, gpt:GPTforProbing, num_features:int, sparsity_coefficient:float, decoder_initialization_scale=0.1):
         super().__init__(gpt=gpt, num_features=num_features)
         self.sparsity_coefficient=sparsity_coefficient
-        residual_stream_size=gpt.pos_emb.shape[-1]
-        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
-        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=1).unsqueeze(-1) # columns of norm 1
-        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
-        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
-        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
-        self.decoder=torch.nn.Parameter(decoder_initial_value)
-        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
-
+        self.encoder, self.encoder_bias, self.decoder, self.decoder_bias=self.create_linear_encoder_decoder(decoder_initialization_scale)
 
     def forward(self, residual_stream, compute_loss=False):
         hidden_layer=self.activation_function(residual_stream @ self.encoder + self.encoder_bias)
@@ -62,6 +53,39 @@ class SAEDummy(SAETemplate):
     def forward(self, residual_stream, compute_loss=False):
         return None, residual_stream,residual_stream,residual_stream
 
+class MultiHeadedTopKSAE(SAETemplate):
+
+    def __init__(self, gpt:GPTforProbing, num_features:int, sparsity:int, num_heads:int, decoder_initialization_scale=0.1):
+        super().__init__(gpt=gpt, num_features=num_features)
+        self.sparsity=sparsity
+        self.num_heads=num_heads
+        self.encoder, self.encoder_bias, self.decoder, self.decoder_bias=self.create_linear_encoder_decoder(decoder_initialization_scale)
+
+    def activation_function(self, encoder_output):
+        activations = F.relu(encoder_output)
+        attention_by_head=activations.reshape((activations.shape[0],activations.shape[1], self.num_heads, self.num_features//self.num_heads))
+        kth_value = torch.topk(attention_by_head, k=self.sparsity//self.num_heads).values.min(dim=-1).values
+        masked_activations=suppress_lower_activations(attention_by_head, kth_value, epsilon=0, mode='relative')
+        return masked_activations.reshape(activations.shape)
+    
+    def forward(self, residual_stream, compute_loss=False):
+        '''
+        takes the trimmed residual stream of a language model (as produced by run_gpt_and_trim) and runs the SAE
+        must return a tuple (loss, residual_stream, hidden_layer, reconstructed_residual_stream)
+        residual_stream is shape (B, W, D), where B is batch size, W is (trimmed) window length, and D is the dimension of the model:
+            - residual_stream is unchanged, of size (B, W, D)
+            - hidden_layer is of shape (B, W, D') where D' is the size of the hidden layer
+            - reconstructed_residual_stream is shape (B, W, D) 
+        '''
+        hidden_layer=self.activation_function(residual_stream @ self.encoder + self.encoder_bias)
+        reconstructed_residual_stream=hidden_layer @ self.decoder + self.decoder_bias
+        loss= self.reconstruction_error(residual_stream, reconstructed_residual_stream) if compute_loss else None
+        return loss, residual_stream, hidden_layer, reconstructed_residual_stream
+
+    def report_model_specific_features(self):
+        return [f"Number of heads: {self.num_heads}", f"Sparsity (total): {self.sparsity}"]
+
+#supported variants: mag_in_aux_loss, relu_only
 #setting no_aux_loss=True implements a gated sae in a different way from the paper that makes more sense to me
 #currently uses tied weights only
 #to try: untied weights original version, as well as using sigmoid instead of step function for training to avoid aux_loss
@@ -189,14 +213,7 @@ class Leaky_Topk_SAE(SAETemplate):
         self.epsilon = epsilon
         self.k=k
         self.suppression_mode = suppression_mode
-        residual_stream_size=gpt.pos_emb.shape[-1]
-        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
-        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
-        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
-        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
-        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
-        self.decoder=torch.nn.Parameter(decoder_initial_value)
-        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
+        self.encoder, self.encoder_bias, self.decoder, self.decoder_bias=self.create_linear_encoder_decoder(decoder_initialization_scale)
 
     def activation_function(self, encoder_output):
         activations = F.relu(encoder_output)
@@ -222,6 +239,13 @@ class Leaky_Topk_SAE(SAETemplate):
     def report_model_specific_features(self):
         return [f"k (sparsity): {self.k}", f"Epsilon (leakyness): {self.epsilon}"]
 
+    def post_copying_update(self, original_sae, new_feature_indices):
+        '''
+        if there are fewer features than k, make k equal the number of features
+        '''
+        if len(new_feature_indices)<self.k:
+            self.k=len(new_feature_indices)
+
 class K_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
     def __init__(self, gpt: GPTforProbing, num_features: int, epsilon: float, k_start: int, anneal_start: int, k_end: int, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features, epsilon, k_start, decoder_initialization_scale)
@@ -243,6 +267,29 @@ class K_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
     
     def report_model_specific_eval_results(self, hidden_layers=None):
         [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
+    
+
+class Epsilon_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
+    def __init__(self, gpt: GPTforProbing, num_features: int, k: int, epsilon_start: int, epsilon_end: int, decoder_initialization_scale=0.1, annealing_mode='linear'):
+        assert annealing_mode in ['linear', 'exponential']
+        super().__init__(gpt, num_features, epsilon=epsilon_start, k=k, decoder_initialization_scale=decoder_initialization_scale)
+        self.epsilon_start = epsilon_start
+        self.epsilon_end = epsilon_end
+        self.annealing_mode=annealing_mode
+
+    def training_prep(self, train_dataset=None, eval_dataset=None, batch_size=None, num_epochs=None):
+        num_steps = len(train_dataset) * num_epochs / batch_size
+        self.epsilon_step_linear = (self.epsilon_end-self.epsilon_start)/num_steps
+        self.epsilon_step_exponential = (self.epsilon_end/self.epsilon_start)**(1/num_steps)
+    
+    def after_step_update(self, hidden_layer=None, step=None):
+        if self.annealing_mode=='linear':
+            self.epsilon+=self.epsilon_step_linear
+        elif self.annealing_mode=='exponential':
+            self.epsilon*=self.epsilon_step_exponential
+    
+    # def report_model_specific_eval_results(self, hidden_layers=None):
+    #     [f"    Average activations over epsilon: {float(torch.mean(hidden_layers > self.epsilon)):.1f}"]
     
 class Random_Leaky_Topk_SAE(Leaky_Topk_SAE):
     '''
@@ -285,15 +332,7 @@ class Top_L1_Proportion_SAE(SAETemplate):
     def __init__(self, gpt: GPTforProbing, num_features: int, L1_proportion_to_remove: float, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features)
         self.proportion = L1_proportion_to_remove
-        residual_stream_size=gpt.pos_emb.shape[-1]
-        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
-        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=0) # columns of norm 1
-        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
-        self.encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
-        self.encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
-        self.decoder=torch.nn.Parameter(decoder_initial_value)
-        self.decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
-        self.lower_triangle_ones = torch.Tensor([[1 if i >= j else 0 for j in range(num_features)] for i in range(num_features)]).to(device)
+        self.encoder, self.encoder_bias, self.decoder, self.decoder_bias=self.create_linear_encoder_decoder(decoder_initialization_scale)
 
     def forward(self, residual_stream, compute_loss=False):
         '''
