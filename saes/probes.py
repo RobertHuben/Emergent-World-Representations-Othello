@@ -13,8 +13,8 @@ from tqdm import tqdm
 from torch.utils.data import Dataset
 from EWOthello.mingpt.dataset import CharDataset
 from EWOthello.data.othello import OthelloBoardState
-from sae_template import SAETemplate
-from architectures import suppress_lower_activations
+from saes.sae_template import SAETemplate
+from saes.architectures import suppress_lower_activations
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
