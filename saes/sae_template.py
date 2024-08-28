@@ -273,21 +273,18 @@ class SAETemplate(torch.nn.Module, ABC):
         hidden_layers=hidden_layers[game_not_ended_mask]
         board_states=board_states[game_not_ended_mask]
         standardized_mean_distances=torch.zeros((hidden_layers.shape[1], board_states.shape[1], 3))
-        for i, feature_activation in tqdm(enumerate(hidden_layers.transpose(0,1))):
-            feature_stdev=feature_activation.std()
-            if feature_stdev<1e-10:
-                continue
-            for j, board_position in enumerate(board_states.transpose(0,1)):
-                for k, piece_class in enumerate([0,1,2]):
-                    if j in [27,28,35,36] and k==1:
-                        #center pieces are never empty
-                        continue
-                    is_target_piece=board_position==piece_class
-                    first_mean=feature_activation[is_target_piece].mean()
-                    second_mean=feature_activation[~ is_target_piece].mean()
-                    smd=torch.abs(first_mean-second_mean)/feature_stdev
-                    standardized_mean_distances[i,j,k]=smd
-        self.classifier_smds=standardized_mean_distances
+        feature_stdevs=hidden_layers.std(dim=0)+1e-10
+        for j, board_position in tqdm(enumerate(board_states.transpose(0,1))):
+            for k, piece_class in enumerate([0,1,2]):
+                if j in [27,28,35,36] and k==1:
+                    #center pieces are never empty
+                    continue
+                is_target_piece=board_position==piece_class
+                first_mean=hidden_layers[is_target_piece].mean(dim=0)
+                second_mean=hidden_layers[~ is_target_piece].mean(dim=0)
+                smd=torch.abs(first_mean-second_mean)/feature_stdevs
+                standardized_mean_distances[:,j,k]=smd
+        self.classifier_smds=standardized_mean_distances        
 
     def num_classifier_above_threshold(self, metric_name="classifier_aurocs", threshold=.9):
         '''
