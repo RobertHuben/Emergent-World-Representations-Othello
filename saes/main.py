@@ -122,12 +122,12 @@ if __name__=="__main__":
 
     sae_filenames = os.listdir("trained_models/for_analysis")
     sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
-    train_dataset, test_dataset = load_probe_datasets_automatic(500000, 1000)
+    train_dataset, test_dataset = load_probe_datasets_automatic(1000, 1000)
     for n, sae_filename in enumerate(sae_filenames):
         if "gated_tied" in sae_filename:
             continue
         sae_name = sae_filename[:-4]
         sae = torch.load(sae_locations[n], map_location=device)
         sae_to_probe = SAEforProbing(sae)
-        probe = LinearProbe(sae, input_dim=1024, layer_to_probe="hidden")
+        probe = LinearProbe(sae_to_probe, input_dim=1024, layer_to_probe="hidden")
         train_probe(probe, f"linear_probe_layer=hidden_sae={sae_name}", TrainingParams(num_epochs=2), dataset_pair=(train_dataset, test_dataset))
