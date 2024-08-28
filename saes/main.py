@@ -9,9 +9,10 @@ from sae_template import SAEPretrainedProbes
 from architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
-from train import train_and_test_sae, test_train_params, train_probe
-from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, L1_Gated_Probe, K_Annealing_Gated_Probe, Constant_Probe, SAEforProbing
+from train import train_and_test_sae, test_train_params, train_probe, L1_Choice_Trainer
+from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, Pre_Chosen_Features_Gated_Probe, L1_Gated_Probe, K_Annealing_Gated_Probe, Constant_Probe, SAEforProbing, move_list_to_state_list
 from train import TrainingParams
+from utils import load_probe_datasets_automatic
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -66,71 +67,17 @@ def gated_training_sweep(sparsity_coeff_list:list, type_list:list, num_features_
                 print(f"\nBeginning training of {sae_name}.")
                 train_and_test_sae(sae, sae_name)
 
-def L1_probe_sweep(sae_location:str, sparsity_coeff_list:list):
-    sae = torch.load(sae_location, map_location=device)
-    sae_name = sae_location.split('/')[-1][:-4]
-    sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
-    for coeff in sparsity_coeff_list:
-        probe_name = f"L1_probe___sae={sae_name}___coeff={coeff}"
-        probe = L1_Sparse_Probe(sae_to_probe, sparsity_coeff=coeff)
-        print(f"Training {probe_name}.\n")
-        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
-
-def without_topk_probe_sweep(sae_location:str, params_list:list):
-    sae = torch.load(sae_location, map_location=device)
-    sae_name = sae_location.split('/')[-1][:-4]
-    sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
-    for (k, coeff) in params_list:
-        probe_name = f"without_topk_probe___sae={sae_name}___k={k}_coeff={coeff}"
-        probe = Without_Topk_Sparse_Probe(sae_to_probe, k=k, sparsity_coeff=coeff)
-        print(f"Training {probe_name}.\n")
-        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
-
-def leaky_topk_probe_sweep(sae_location:str, params_list:list):
-    sae = torch.load(sae_location, map_location=device)
-    sae_name = sae_location.split('/')[-1][:-4]
-    sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
-    for (k, epsilon) in params_list:
-        probe_name = f"leaky_topk_probe___sae={sae_name}___k={k}_eps={epsilon}"
-        probe = Leaky_Topk_Probe(sae_to_probe, k=k, epsilon=epsilon)
-        print(f"Training {probe_name}.\n")
-        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
-
-def k_annealing_probe_sweep(sae_location:str, params_list:list):
-    sae = torch.load(sae_location, map_location=device)
-    sae_name = sae_location.split('/')[-1][:-4]
-    sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=2000000)
-    for (epsilon, k_start, before_anneal_proportion, k_end, after_anneal_proportion) in params_list:
-        probe_name = f"k_anneal_probe___sae={sae_name}___eps={epsilon}_kstart={k_start}_before={before_anneal_proportion}_kend={k_end}_after={after_anneal_proportion}"
-        probe = K_Annealing_Probe(sae_to_probe, epsilon=epsilon, k_start=k_start, before_anneal_proportion=before_anneal_proportion, k_end=k_end, after_anneal_proportion=after_anneal_proportion)
-        print(f"Training {probe_name}.\n")
-        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
-
-def L1_gated_probe_sweep(sae_location:str, params_list:list):
-    sae = torch.load(sae_location, map_location=device)
-    sae_name = sae_location.split('/')[-1][:-4]
-    sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=1000000)
-    for coeff, init in params_list:
-        probe_name = f"gated_L1_probe___sae={sae_name}___coeff={coeff}_init={init}"
-        probe = L1_Gated_Probe(sae_to_probe, sparsity_coeff=coeff, init_type=init)
-        print(f"Training {probe_name}.\n")
-        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
-
-def gated_k_annealing_probe_sweep(sae_location:str, params_list:list):
-    sae = torch.load(sae_location, map_location=device)
-    sae_name = sae_location.split('/')[-1][:-4]
-    sae_to_probe = SAEforProbing(sae)
-    training_params = TrainingParams(num_train_data=2000000)
-    for (epsilon, k_start, before_anneal_proportion, k_end, after_anneal_proportion) in params_list:
-        probe_name = f"gated_k_anneal_probe___sae={sae_name}___eps={epsilon}_kstart={k_start}_before={before_anneal_proportion}_kend={k_end}_after={after_anneal_proportion}"
-        probe = K_Annealing_Gated_Probe(sae_to_probe, epsilon=epsilon, k_start=k_start, before_anneal_proportion=before_anneal_proportion, k_end=k_end, after_anneal_proportion=after_anneal_proportion)
-        print(f"Training {probe_name}.\n")
-        train_probe(probe, probe_name, train_params=training_params, eval_after=True)
+def L1_choice_probe_sweep(sae_locations:list, params_list:list, train_size=500000):
+    train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_size, test_size=1000)
+    for sae_location in sae_locations:
+        sae = torch.load(sae_location, map_location=device)
+        sae_name = sae_location.split('/')[-1][:-4]
+        sae_to_probe = SAEforProbing(sae)
+        for sparsity_coeff in params_list:
+            probe_name = f"L1_choice_probe_coeff={sparsity_coeff}__sae={sae_name}"
+            print(f"Beginning training of {probe_name}")
+            trainer = L1_Choice_Trainer(sae_to_probe, probe_name, train_dataset, test_dataset, sparsity_coeff=sparsity_coeff)
+            trainer.train()
 
 
 if __name__=="__main__":
@@ -141,54 +88,8 @@ if __name__=="__main__":
     #gated_training_sweep([60, 100, 120, 150], ["standard"])
 
     #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
-    sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
+    #sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     
-    """ sae = torch.load(sae_location, map_location=device)
-    sae_to_probe = SAEforProbing(sae)
-    for (layer_to_probe, input_dim) in [("residual", 512), ("hidden", 1024), ("reconstruction", 512)]:
-        probe = LinearProbe(model_to_probe=sae_to_probe, input_dim=input_dim, layer_to_probe=layer_to_probe)
-        train_params=TrainingParams(num_train_data=2000000)
-        sae_name = sae_location.split('/')[-1][:-4]
-        probe_name = f"linear_probe_layer={layer_to_probe}_sae={sae_name}"
-        train_probe(probe, probe_name, train_params=train_params, eval_after=True)
- """
-    
-    """ params_list = [10, 20, 30]
-    L1_probe_sweep(sae_location, params_list)
- """
-
-    """ params_list = []
-    for coeff in [1, 10, 20]:
-        for k in [1, 2, 3]:
-            params_list.append((k, coeff))
-    without_topk_probe_sweep(sae_location, params_list)
- """
-
-    """ params_list = []
-    for k in [1, 2, 3]:
-        for epsilon in [0.005, 0.01]:
-            if (k, epsilon) == (1, 0.005):
-                continue
-            params_list.append((k, epsilon))
-    leaky_topk_probe_sweep(sae_location, params_list)
- """
-
-    params_list = []
-    for k_start in [1024]:
-        for before_anneal_proportion in [0.25]:
-            for k_end in [1, 2, 3, 4, 5, 6, 1024]:
-                after_anneal_proportion = 0.5 - before_anneal_proportion
-                epsilon = 0
-                params_list.append((epsilon, k_start, before_anneal_proportion, k_end, after_anneal_proportion))
-    gated_k_annealing_probe_sweep(sae_location, params_list)
-
-    
-    """ params_list = []
-    for coeff in [10, 20, 30]:
-        for init in ["ones", "zeros", "random"]:
-            params_list.append((coeff, init))
-    L1_gated_probe_sweep(sae_location, params_list)
- """
     
     #test a constant probe
     """ sae = torch.load(sae_location, map_location=device)
@@ -196,3 +97,37 @@ if __name__=="__main__":
     training_params = TrainingParams(num_train_data=500000)
     probe = Constant_Probe(sae_to_probe, input_dim=1024)
     train_probe(probe, "constant_probe", train_params=training_params, eval_after=True) """
+
+    """ layer = 3
+    coeff = 1.7
+    num_features = 1024
+    gpt = load_pre_trained_gpt(probe_layer=layer)
+    sae = SAEAnthropic(gpt, num_features, coeff)
+    sae_name = f"anthropic_sae_coeff={coeff}_features={num_features}"
+    print(f"\nBeginning training of {sae_name}.")
+    train_and_test_sae(sae, sae_name) """
+    
+    """ k = 100
+    sae = Leaky_Topk_SAE(gpt, num_features, epsilon=0, k=k)
+    sae_name = f"topk_sae_k={100}_features={num_features}_layer={layer}"
+    print(f"\nBeginning training of {sae_name}.")
+    train_and_test_sae(sae, sae_name) """
+    
+    """ test_train_size = 1000
+    full_train_size = 500000
+    sae_filenames = os.listdir("trained_models/for_analysis")
+    sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
+    coeffs = [21, 24, 27, 30, 33, 36, 39]
+    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size) """
+
+    sae_filenames = os.listdir("trained_models/for_analysis")
+    sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
+    train_dataset, test_dataset = load_probe_datasets_automatic(500000, 1000)
+    for n, sae_filename in enumerate(sae_filenames):
+        if "gated_tied" in sae_filename:
+            continue
+        sae_name = sae_filename[:-4]
+        sae = torch.load(sae_locations[n], map_location=device)
+        sae_to_probe = SAEforProbing(sae)
+        probe = LinearProbe(sae, input_dim=1024, layer_to_probe="hidden")
+        train_probe(probe, f"linear_probe_layer=hidden_sae={sae_name}", TrainingParams(num_epochs=2), dataset_pair=(train_dataset, test_dataset))

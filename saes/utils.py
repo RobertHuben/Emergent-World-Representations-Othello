@@ -3,8 +3,14 @@ from EWOthello.data.othello import get
 from EWOthello.mingpt.model import GPTConfig, GPTforProbing
 from EWOthello.mingpt.dataset import CharDataset
 from saes.architectures import SAEDummy
+from probes import ProbeDataset, ProbeDatasetPrecomputed
 import random
+import pickle
+import os
 from copy import copy
+from tqdm import tqdm
+import itertools
+import zipfile
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -23,6 +29,64 @@ def load_datasets_automatic(train_size:int,test_size:int, shuffle_seed=1) -> Cha
     train_othello.sequences=othello.sequences[:train_size]
     test_othello.sequences=othello.sequences[train_size:train_size+test_size]
     return CharDataset(train_othello), CharDataset(test_othello)
+
+def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1, mode="precomputed"):
+    if mode == "precomputed":
+        data_dir="EWOthello/data/othello_synthetic_with_board_states"
+    else:
+        data_dir="EWOthello/data/othello_synthetic"
+    total_data_needed = round((test_size+train_size) * 1.001)
+    games = []
+    filenames = os.listdir(data_dir)
+    print("Collecting, unzipping, and loading data files...")
+    pickle_files = []
+    zip_files = []
+    for filename in filenames:
+        if filename[-4:] == ".pkl":
+            pickle_files.append(filename)
+        elif filename[-4:] == ".zip":
+            zip_files.append(filename)
+    print("Loading previously-unzipped files...")
+    finished_loading = False
+    for filename in pickle_files:
+        with open(f"{data_dir}/{filename}", "rb") as handle:
+            g = pickle.load(handle)
+            games.extend(g)
+        print(f"\r{len(games)} games loaded out of {total_data_needed}", end="")
+        if len(games) >= total_data_needed:
+            finished_loading = True
+            break
+    if not finished_loading:
+        print("\nUnzipping and loading zipped files...")
+        for filename in zip_files:
+            with zipfile.ZipFile(f"{data_dir}/{filename}","r") as zip_ref:
+                zip_ref.extractall(data_dir)
+            with open(f"{data_dir}/{filename[:-4]}.pkl", "rb") as handle:
+                g = pickle.load(handle)
+                games.extend(g)
+            print(f"\r{len(games)} games loaded out of {total_data_needed}", end="")
+            if len(games) >= total_data_needed:
+                finished_loading = True
+                break
+    
+    print("\nDeduplicating...")
+    games.sort()
+    games = [k for k, _ in itertools.groupby(games)]
+    print(f"Deduplicating finished with {len(games)} games left")
+
+    random.seed(shuffle_seed)
+    random.shuffle(games)
+    test_games = games[:test_size]
+    if finished_loading:
+        train_games = games[test_size:train_size+test_size]
+    else:
+        train_games = games[test_size:]
+
+    if mode == "precomputed":
+        return ProbeDatasetPrecomputed(train_games), ProbeDatasetPrecomputed(test_games)
+    else:
+        return ProbeDataset(train_games), ProbeDataset(test_games)
+
 
 def load_dataset(split_fraction=1, use_first_half_of_split=True, entries_limit=False, shuffle_seed=1) -> CharDataset:
     othello = get(ood_num=-1, data_root=None, num_preload=11) # 11 corresponds to over 1 million games
