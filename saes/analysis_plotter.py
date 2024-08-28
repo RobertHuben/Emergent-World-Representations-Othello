@@ -10,8 +10,8 @@ import re
 from saes.utils import load_datasets_automatic
 from saes.analysis_metrics import compute_feature_frequency
 from saes.board_states import get_board_states
-from board_states import get_board_states
-from probes import Gated_Probe
+from saes.board_states import get_board_states
+from saes.probes import Gated_Probe
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 

@@ -2,8 +2,8 @@ import torch
 from EWOthello.data.othello import get
 from EWOthello.mingpt.model import GPTConfig, GPTforProbing
 from EWOthello.mingpt.dataset import CharDataset
+from saes.architectures import SAEDummy
 from probes import ProbeDataset, ProbeDatasetPrecomputed
-from architectures import SAEDummy
 import random
 import pickle
 import os
