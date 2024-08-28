@@ -1,11 +1,13 @@
+import os
 import torch
 from typing import Union
-from sae_template import SAETemplate
-from probes import LinearProbe, ProbeDataset, SAEforProbing, L1_Sparse_Probe, Pre_Chosen_Features_Gated_Probe
-from EWOthello.mingpt.model import GPTforProbing
-from utils import load_datasets_automatic, load_probe_datasets_automatic
 from datetime import datetime
-import os
+
+from EWOthello.mingpt.model import GPTforProbing
+
+from saes.sae_template import SAETemplate
+from saes.probes import LinearProbe, ProbeDataset, SAEforProbing, L1_Sparse_Probe, Pre_Chosen_Features_Gated_Probe
+from saes.utils import load_datasets_automatic, load_probe_datasets_automatic
 from saes.sae_template import SAETemplate
 from saes.probes import LinearProbe, ProbeDataset
 from saes.utils import load_datasets_automatic
