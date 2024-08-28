@@ -1,16 +1,18 @@
-import torch
-from EWOthello.data.othello import get
-from EWOthello.mingpt.model import GPTConfig, GPTforProbing
-from EWOthello.mingpt.dataset import CharDataset
-from saes.architectures import SAEDummy
-from probes import ProbeDataset, ProbeDatasetPrecomputed
 import random
 import pickle
 import os
-from copy import copy
-from tqdm import tqdm
+import torch
 import itertools
 import zipfile
+from copy import copy
+from tqdm import tqdm
+
+from EWOthello.data.othello import get
+from EWOthello.mingpt.model import GPTConfig, GPTforProbing
+from EWOthello.mingpt.dataset import CharDataset
+
+from saes.architectures import SAEDummy
+from saes.probes import ProbeDataset, ProbeDatasetPrecomputed
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
