@@ -115,7 +115,7 @@ if __name__=="__main__":
 
     gpt = load_pre_trained_gpt(probe_layer=3)
     coeffs = [0.5, 1, 1.5, 2, 4, 8, 16]
-    anneal_proportions = [0.9]
+    anneal_proportions = [0.5]
     for coeff in coeffs:
         for anneal_prop in anneal_proportions:
             for no_aux_loss in [True]:
