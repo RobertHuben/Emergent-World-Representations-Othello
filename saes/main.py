@@ -76,8 +76,12 @@ def L1_choice_probe_sweep(sae_locations:list, coeff_lists:list, train_size=50000
         for sparsity_coeff in coeff_lists[n]:
             probe_name = f"L1_choice_probe_coeff={sparsity_coeff}__sae={sae_name}"
             print(f"Beginning training of {probe_name}")
-            trainer = L1_Choice_Trainer(sae_to_probe, probe_name, train_dataset, test_dataset, sparsity_coeff=sparsity_coeff)
-            trainer.train()
+            if sparsity_coeff == "none":
+                probe = LinearProbe(sae_to_probe, input_dim=1024, layer_to_probe="hidden")
+                train_probe(probe, probe_name, TrainingParams(num_epochs=6), dataset_pair=(train_dataset, test_dataset))
+            else:
+                trainer = L1_Choice_Trainer(sae_to_probe, probe_name, train_dataset, test_dataset, sparsity_coeff=sparsity_coeff)
+                trainer.train()
 
 
 if __name__=="__main__":
@@ -143,7 +147,7 @@ if __name__=="__main__":
     below = [18, 15, 12]
     coeffs=[]
     for n, filename in enumerate(sae_filenames):
-        coeffs.append([21, 24, 27, 30, 33, 36, 39])
+        coeffs.append(["none", 21, 24, 27, 30, 33, 36, 39])
     sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
     L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size)
 
