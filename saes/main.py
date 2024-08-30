@@ -114,7 +114,7 @@ if __name__=="__main__":
     train_and_test_sae(sae, sae_name) """
 
     gpt = load_pre_trained_gpt(probe_layer=3)
-    coeffs = [20, 24, 28, 36, 40, 44, 48]
+    coeffs = [21, 22, 23, 25, 26, 27]
     anneal_proportions = [0.5]
     for coeff in coeffs:
         for anneal_prop in anneal_proportions:
