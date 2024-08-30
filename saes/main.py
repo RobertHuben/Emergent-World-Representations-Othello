@@ -115,7 +115,7 @@ if __name__=="__main__":
 
     """ gpt = load_pre_trained_gpt(probe_layer=3)
     coeffs = [0.5, 1, 2, 4, 8, 16, 32, 64, 128]
-    anneal_proportions = [0.55, 0.70, 0.85, 1.0]
+    anneal_proportions = [0.2, 0.4, 0.6, 0.8]
     for coeff in coeffs:
         for anneal_prop in anneal_proportions:
             sae = P_Annealing_SAE(gpt, 1024, coeff, anneal_prop)

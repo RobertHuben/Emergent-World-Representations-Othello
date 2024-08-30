@@ -184,7 +184,7 @@ class Smoothed_L0_SAE(SAEAnthropic):
         return torch.mean(smoothed_piecewise(normalized_hidden_layer, functions, transitions))
     
     def report_model_specific_eval_results(self, hidden_layers=None):
-        return [f"    Average activations over epsilon: {torch.sum(hidden_layers > self.epsilon)/hidden_layers.numel():.1f}"]
+        return [f"    Average activations over epsilon: {torch.sum(hidden_layers > self.epsilon)/hidden_layers[..., 0].numel():.1f}"]
     
 class Without_TopK_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int):
