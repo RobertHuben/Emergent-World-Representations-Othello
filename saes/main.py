@@ -114,14 +114,15 @@ if __name__=="__main__":
     train_and_test_sae(sae, sae_name) """
 
     gpt = load_pre_trained_gpt(probe_layer=3)
-    coeffs = [21, 22, 23, 25, 26, 27]
+    coeffs = [22, 24, 26, 28, 30]
     anneal_proportions = [0.5]
     for coeff in coeffs:
         for anneal_prop in anneal_proportions:
-            sae = P_Annealing_SAE(gpt, 1024, coeff, anneal_prop)
-            sae_name = f"p_anneal_coeff={coeff}_anneal={anneal_prop}"
-            print(f"Beginning training of {sae_name}")
-            train_and_test_sae(sae, sae_name)
+            for no_aux_loss in [True, False]:
+                sae = Gated_P_Annealing_SAE(gpt, 1024, coeff, anneal_prop, no_aux_loss=no_aux_loss)
+                sae_name = f"p_anneal_coeff={coeff}_anneal={anneal_prop}"
+                print(f"Beginning training of {sae_name}")
+                train_and_test_sae(sae, sae_name)
     
     """ gpt = load_pre_trained_gpt(probe_layer=3)
     coeffs = [0.5, 1, 2, 4, 8, 16, 32, 64, 128]
