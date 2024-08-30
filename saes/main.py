@@ -6,7 +6,7 @@ import torch
 from tqdm import tqdm
 
 from sae_template import SAEPretrainedProbes
-from architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE, P_Annealing_SAE
+from architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE, P_Annealing_SAE, Smoothed_L0_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae, test_train_params, train_probe, L1_Choice_Trainer
@@ -113,13 +113,24 @@ if __name__=="__main__":
     print(f"\nBeginning training of {sae_name}.")
     train_and_test_sae(sae, sae_name) """
 
-    gpt = load_pre_trained_gpt(probe_layer=3)
+    """ gpt = load_pre_trained_gpt(probe_layer=3)
     coeffs = [0.5, 1, 2, 4, 8, 16, 32, 64, 128]
     anneal_proportions = [0.55, 0.70, 0.85, 1.0]
     for coeff in coeffs:
         for anneal_prop in anneal_proportions:
             sae = P_Annealing_SAE(gpt, 1024, coeff, anneal_prop)
             sae_name = f"p_anneal_coeff={coeff}_anneal={anneal_prop}"
+            print(f"Beginning training of {sae_name}")
+            train_and_test_sae(sae, sae_name) """
+    
+    gpt = load_pre_trained_gpt(probe_layer=3)
+    coeffs = [0.5, 1, 2, 4, 8, 16, 32, 64, 128]
+    epsilon = 0.01
+    deltas = [2.5, 5, 10, 20]
+    for coeff in coeffs:
+        for delta in deltas:
+            sae = Smoothed_L0_SAE(gpt, 1024, coeff, epsilon, delta)
+            sae_name = f"smoothed_L0_coeff={coeff}_delta={delta}_epsilon={epsilon}"
             print(f"Beginning training of {sae_name}")
             train_and_test_sae(sae, sae_name)
 
