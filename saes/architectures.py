@@ -169,6 +169,17 @@ class P_Annealing_SAE(SAEAnthropic):
     
     def sparsity_loss_function(self, hidden_layer):
         return (hidden_layer**self.p).mean()
+    
+class Gated_P_Annealing_SAE(P_Annealing_SAE, Gated_SAE):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, anneal_proportion: float, p_end=0.2, queue_length=10, no_aux_loss=False, decoder_initialization_scale=0.1):
+        P_Annealing_SAE.__init__(self, gpt, num_features, sparsity_coefficient, anneal_proportion, p_end, queue_length, decoder_initialization_scale)
+        Gated_SAE.__init__(self, gpt, num_features, sparsity_coefficient, no_aux_loss=no_aux_loss)
+
+    def forward(self, residual_stream, compute_loss=False):
+        return Gated_SAE.forward(self, residual_stream, compute_loss)
+
+    def sparsity_loss_function(self, hidden_layer):
+        return P_Annealing_SAE.sparsity_loss_function(self, hidden_layer)
 
 class Smoothed_L0_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, epsilon: float, delta: float):
