@@ -113,7 +113,7 @@ if __name__=="__main__":
     print(f"\nBeginning training of {sae_name}.")
     train_and_test_sae(sae, sae_name) """
 
-    """ gpt = load_pre_trained_gpt(probe_layer=3)
+    gpt = load_pre_trained_gpt(probe_layer=3)
     coeffs = [0.5, 1, 2, 4, 8, 16, 32, 64, 128]
     anneal_proportions = [0.2, 0.4, 0.6, 0.8]
     for coeff in coeffs:
@@ -121,9 +121,9 @@ if __name__=="__main__":
             sae = P_Annealing_SAE(gpt, 1024, coeff, anneal_prop)
             sae_name = f"p_anneal_coeff={coeff}_anneal={anneal_prop}"
             print(f"Beginning training of {sae_name}")
-            train_and_test_sae(sae, sae_name) """
+            train_and_test_sae(sae, sae_name)
     
-    gpt = load_pre_trained_gpt(probe_layer=3)
+    """ gpt = load_pre_trained_gpt(probe_layer=3)
     coeffs = [0.5, 1, 2, 4, 8, 16, 32, 64, 128]
     epsilon = 0.01
     deltas = [2.5, 5, 10, 20]
@@ -132,7 +132,7 @@ if __name__=="__main__":
             sae = Smoothed_L0_SAE(gpt, 1024, coeff, epsilon, delta)
             sae_name = f"smoothed_L0_coeff={coeff}_delta={delta}_epsilon={epsilon}"
             print(f"Beginning training of {sae_name}")
-            train_and_test_sae(sae, sae_name)
+            train_and_test_sae(sae, sae_name) """
 
     
     """ test_train_size = 1000
