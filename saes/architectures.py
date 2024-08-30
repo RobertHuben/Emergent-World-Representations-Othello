@@ -168,7 +168,7 @@ class P_Annealing_SAE(SAEAnthropic):
         return
     
     def sparsity_loss_function(self, hidden_layer):
-        return torch.norm(hidden_layer, p=self.p, dim=-1).sum() / hidden_layer.numel()
+        return (hidden_layer**self.p).mean()
 
 class Smoothed_L0_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, epsilon: float, delta: float):
