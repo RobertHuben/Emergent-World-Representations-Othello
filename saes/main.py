@@ -6,7 +6,7 @@ import torch
 from tqdm import tqdm
 
 from sae_template import SAEPretrainedProbes
-from architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE
+from architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE, P_Annealing_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae, test_train_params, train_probe, L1_Choice_Trainer
@@ -112,8 +112,19 @@ if __name__=="__main__":
     sae_name = f"topk_sae_k={100}_features={num_features}_layer={layer}"
     print(f"\nBeginning training of {sae_name}.")
     train_and_test_sae(sae, sae_name) """
+
+    gpt = load_pre_trained_gpt(probe_layer=3)
+    coeffs = [0.5, 1, 2, 4, 8, 16, 32, 64, 128]
+    anneal_proportions = [0.55, 0.70, 0.85, 1.0]
+    for coeff in coeffs:
+        for anneal_prop in anneal_proportions:
+            sae = P_Annealing_SAE(gpt, 1024, coeff, anneal_prop)
+            sae_name = f"p_anneal_coeff={coeff}_anneal={anneal_prop}"
+            print(f"Beginning training of {sae_name}")
+            train_and_test_sae(sae, sae_name)
+
     
-    test_train_size = 1000
+    """ test_train_size = 1000
     full_train_size = 500000
     sae_filenames = os.listdir("trained_models/for_analysis")
     above = [42, 48, 54]
@@ -127,7 +138,7 @@ if __name__=="__main__":
         if "top" in filename:
             coeffs[n].extend(below)
     sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
-    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size)
+    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size) """
 
     """ sae_filenames = os.listdir("trained_models/for_analysis")
     sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]

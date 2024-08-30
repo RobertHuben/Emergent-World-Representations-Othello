@@ -145,15 +145,16 @@ class ActivationQueue:
         return torch.sum(list_as_tensor**last_p) / torch.sum(list_as_tensor**next_p)
 
 class P_Annealing_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, anneal_start: int, p_end=0.2, queue_length=10, decoder_initialization_scale=0.1):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, anneal_proportion: float, p_end=0.2, queue_length=10, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
         self.p = 1
-        self.anneal_start = anneal_start
+        self.anneal_proportion = anneal_proportion
         self.p_end = p_end
         self.queue = ActivationQueue(queue_length)
     
     def training_prep(self, train_dataset=None, eval_dataset=None, batch_size=None, num_epochs=None):
         num_steps = len(train_dataset) * num_epochs / batch_size
+        self.anneal_start = round(num_steps*(1-self.anneal_proportion))
         self.p_step = (1 - self.p_end)/(num_steps - self.anneal_start)
         return
     
