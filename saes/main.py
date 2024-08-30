@@ -6,7 +6,7 @@ import torch
 from tqdm import tqdm
 
 from sae_template import SAEPretrainedProbes
-from architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE, P_Annealing_SAE, Smoothed_L0_SAE, Gated_P_Annealing_SAE
+from architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE, P_Annealing_SAE, Smoothed_L0_SAE, Gated_P_Annealing_SAE, Gated_Smoothed_L0_SAE
 from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
 from analysis_plotter import plot_smd_auroc_distributions
 from train import train_and_test_sae, test_train_params, train_probe, L1_Choice_Trainer
