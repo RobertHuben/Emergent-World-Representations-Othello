@@ -197,6 +197,17 @@ class Smoothed_L0_SAE(SAEAnthropic):
     def report_model_specific_eval_results(self, hidden_layers=None):
         return [f"    Average activations over epsilon: {torch.sum(hidden_layers > self.epsilon)/hidden_layers[..., 0].numel():.1f}"]
     
+class Gated_Smoothed_L0_SAE(Smoothed_L0_SAE, Gated_SAE):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, epsilon:float, delta:float, no_aux_loss=False):
+        Smoothed_L0_SAE.__init__(self, gpt, num_features, sparsity_coefficient, epsilon, delta)
+        Gated_SAE.__init__(self, gpt, num_features, sparsity_coefficient, no_aux_loss=no_aux_loss)
+
+    def forward(self, residual_stream, compute_loss=False):
+        return Gated_SAE.forward(self, residual_stream, compute_loss)
+
+    def sparsity_loss_function(self, hidden_layer):
+        return Smoothed_L0_SAE.sparsity_loss_function(self, hidden_layer)
+    
 class Without_TopK_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int):
         super().__init__(gpt, num_features, sparsity_coefficient)
