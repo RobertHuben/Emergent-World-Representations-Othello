@@ -67,13 +67,13 @@ def gated_training_sweep(sparsity_coeff_list:list, type_list:list, num_features_
                 print(f"\nBeginning training of {sae_name}.")
                 train_and_test_sae(sae, sae_name)
 
-def L1_choice_probe_sweep(sae_locations:list, params_list:list, train_size=500000):
+def L1_choice_probe_sweep(sae_locations:list, coeff_lists:list, train_size=500000):
     train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_size, test_size=1000)
-    for sae_location in sae_locations:
+    for n, sae_location in enumerate(sae_locations):
         sae = torch.load(sae_location, map_location=device)
         sae_name = sae_location.split('/')[-1][:-4]
         sae_to_probe = SAEforProbing(sae)
-        for sparsity_coeff in params_list:
+        for sparsity_coeff in coeff_lists[n]:
             probe_name = f"L1_choice_probe_coeff={sparsity_coeff}__sae={sae_name}"
             print(f"Beginning training of {probe_name}")
             trainer = L1_Choice_Trainer(sae_to_probe, probe_name, train_dataset, test_dataset, sparsity_coeff=sparsity_coeff)
@@ -113,14 +113,23 @@ if __name__=="__main__":
     print(f"\nBeginning training of {sae_name}.")
     train_and_test_sae(sae, sae_name) """
     
-    """ test_train_size = 1000
+    test_train_size = 1000
     full_train_size = 500000
     sae_filenames = os.listdir("trained_models/for_analysis")
+    above = [42, 48, 54]
+    below = [18, 15, 12]
+    coeffs = [[],[],[],[],[]]
+    for n, filename in enumerate(sae_filenames):
+        if "gated" in filename:
+            coeffs[n].extend(below)
+        else:
+            coeffs[n].extend(above)
+        if "top" in filename:
+            coeffs[n].extend(below)
     sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
-    coeffs = [21, 24, 27, 30, 33, 36, 39]
-    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size) """
+    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size)
 
-    sae_filenames = os.listdir("trained_models/for_analysis")
+    """ sae_filenames = os.listdir("trained_models/for_analysis")
     sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
     train_dataset, test_dataset = load_probe_datasets_automatic(500000, 1000)
     for n, sae_filename in enumerate(sae_filenames):
@@ -128,4 +137,4 @@ if __name__=="__main__":
         sae = torch.load(sae_locations[n], map_location=device)
         sae_to_probe = SAEforProbing(sae)
         probe = LinearProbe(sae_to_probe, input_dim=1024, layer_to_probe="hidden")
-        train_probe(probe, f"linear_probe_layer=hidden_sae={sae_name}", TrainingParams(num_epochs=6), dataset_pair=(train_dataset, test_dataset))
+        train_probe(probe, f"linear_probe_layer=hidden_sae={sae_name}", TrainingParams(num_epochs=6), dataset_pair=(train_dataset, test_dataset)) """
