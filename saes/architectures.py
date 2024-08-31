@@ -104,7 +104,7 @@ class Gated_SAE(SAEAnthropic):
             encoder = self.encoder
         encoding = (residual_stream - self.decoder_bias) @ encoder
         if self.no_aux_loss:
-            hidden_layer = F.relu(F.relu(encoding + self.b_gate) * torch.exp(self.r_mag) + self.b_mag) #is b_mag really necessary here?
+            hidden_layer = F.relu(encoding + self.b_gate) * torch.exp(self.r_mag) + self.b_mag #is b_mag really necessary here?
         else:
             hidden_layer_before_gating = F.relu(encoding * torch.exp(self.r_mag) + self.b_mag)
             hidden_layer = ((encoding + self.b_gate) > 0) * hidden_layer_before_gating
