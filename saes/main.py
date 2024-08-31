@@ -88,8 +88,8 @@ if __name__=="__main__":
 
     #training_dataset_sweep()
     #evaluate_pretrained_probes(save_dir="probe_evals")
-    #leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005], mode_list=["absolute"])
-    gated_training_sweep([1, 1.5, 2, 2.5], ["tied_weights_no_aux_loss"])
+    leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005, 0], mode_list=["absolute"])
+    gated_training_sweep([80], ["standard"])
 
     #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     #sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
@@ -102,14 +102,14 @@ if __name__=="__main__":
     probe = Constant_Probe(sae_to_probe, input_dim=1024)
     train_probe(probe, "constant_probe", train_params=training_params, eval_after=True) """
 
-    """ layer = 3
+    layer = 3
     coeff = 1.7
     num_features = 1024
     gpt = load_pre_trained_gpt(probe_layer=layer)
     sae = SAEAnthropic(gpt, num_features, coeff)
     sae_name = f"anthropic_sae_coeff={coeff}_features={num_features}"
     print(f"\nBeginning training of {sae_name}.")
-    train_and_test_sae(sae, sae_name) """
+    train_and_test_sae(sae, sae_name)
     
     """ k = 100
     sae = Leaky_Topk_SAE(gpt, num_features, epsilon=0, k=k)
