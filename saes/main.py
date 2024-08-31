@@ -89,7 +89,7 @@ if __name__=="__main__":
     #training_dataset_sweep()
     #evaluate_pretrained_probes(save_dir="probe_evals")
     #leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005], mode_list=["absolute"])
-    #gated_training_sweep([60, 100, 120, 150], ["standard"])
+    gated_training_sweep([0.5, 1, 1.5, 2, 2.5], ["tied_weights_no_aux_loss"])
 
     #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     #sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
@@ -128,7 +128,7 @@ if __name__=="__main__":
                 print(f"Beginning training of {sae_name}")
                 train_and_test_sae(sae, sae_name) """
     
-    gpt = load_pre_trained_gpt(probe_layer=3)
+    """ gpt = load_pre_trained_gpt(probe_layer=3)
     epsilon = 0.01
     deltas = [1, 5, 10]
     for delta in deltas:
@@ -142,7 +142,7 @@ if __name__=="__main__":
             sae = Smoothed_L0_SAE(gpt, 1024, coeff, epsilon, delta)
             sae_name = f"smoothed_L0_coeff={coeff}_delta={delta}_epsilon={epsilon}"
             print(f"Beginning training of {sae_name}")
-            train_and_test_sae(sae, sae_name)
+            train_and_test_sae(sae, sae_name) """
 
     
     """ test_train_size = 1000
