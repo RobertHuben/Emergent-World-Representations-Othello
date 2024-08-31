@@ -153,7 +153,7 @@ if __name__=="__main__":
         if "coeff=26" in filename:
             coeffs.append([1, 2, 4, 8, 10])
         else:
-            coeffs.append(["none", 21, 24, 27, 30, 33, 36, 39])
+            coeffs.append(["none", 1, 2, 4, 8, 10, 20, 40])
     sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
     L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size)
 
