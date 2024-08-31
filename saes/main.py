@@ -128,24 +128,24 @@ if __name__=="__main__":
                 print(f"Beginning training of {sae_name}")
                 train_and_test_sae(sae, sae_name) """
     
-    """ gpt = load_pre_trained_gpt(probe_layer=3)
+    gpt = load_pre_trained_gpt(probe_layer=3)
     epsilon = 0.01
-    deltas = [2.5, 5, 10]
+    deltas = [1, 5, 10]
     for delta in deltas:
-        if delta == 2.5:
-            coeffs = [40, 50, 80, 100]
+        if delta == 1:
+            coeffs = [40, 60, 80, 100]
         elif delta == 5:
-            coeffs = [100, 150, 200, 250]
+            coeffs = [300, 400, 500, 600]
         elif delta == 10:
-            coeffs = [150, 200, 250, 300]
+            coeffs = [400, 500, 600, 700]
         for coeff in coeffs:
             sae = Smoothed_L0_SAE(gpt, 1024, coeff, epsilon, delta)
             sae_name = f"smoothed_L0_coeff={coeff}_delta={delta}_epsilon={epsilon}"
             print(f"Beginning training of {sae_name}")
-            train_and_test_sae(sae, sae_name) """
+            train_and_test_sae(sae, sae_name)
 
     
-    test_train_size = 1000
+    """ test_train_size = 1000
     full_train_size = 500000
     sae_filenames = os.listdir("trained_models/for_analysis")
     coeffs=[]
@@ -155,7 +155,7 @@ if __name__=="__main__":
         else:
             coeffs.append(["none", 1, 2, 4, 8, 10, 20, 40])
     sae_locations = [f"trained_models/for_analysis/{filename}" for filename in sae_filenames]
-    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size)
+    L1_choice_probe_sweep(sae_locations, coeffs, train_size=full_train_size) """
 
 
     """ sae_filenames = os.listdir("trained_models/for_analysis")
