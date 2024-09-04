@@ -19,10 +19,13 @@ def plot_smd_auroc_distributions(sae, save_dir=None):
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)
 
-    _, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
+    if sae.classifier_aurocs == None or sae.classifier_smds == None:
+        _, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
 
-    sae.compute_all_smd(test_dataset)
-    sae.compute_all_aurocs(test_dataset)
+    if sae.classifier_smds == None:
+        sae.compute_all_smd(test_dataset)
+    if sae.classifier_aurocs == None:
+        sae.compute_all_aurocs(test_dataset)
 
     best_smds = sae.classifier_smds.max(dim=0).values.flatten().detach().numpy()
     best_aurocs = sae.classifier_aurocs.max(dim=0).values.flatten().detach().numpy()
@@ -38,7 +41,10 @@ def plot_smd_auroc_distributions(sae, save_dir=None):
 
         bins = np.linspace(min(array), max(array), 75) # fixed number of bins
 
-        plt.xlim([0, max(array)+0.5])
+        if metrics[i] == "smd":
+            plt.xlim([0, max(array)+0.5])
+        elif metrics[i] == "auroc":
+            plt.xlim([0.7, 1.0])
 
         plt.hist(array, bins=bins, alpha=0.5)
         plt.title(f'{metrics[i]} distribution')
@@ -293,6 +299,7 @@ def plot_features_used_vs_accuracy(data:dict, save_name=None):
     full_features.spines.left.set_visible(False)
     main.set(xlabel="Number of features used", ylabel="Probe Accuracy")
     main.set_xlim(1.5, 5.2)
+    main.set_ylim(0.75, 1.0)
     plt.xticks(np.arange(1024, 1025, step=1))
     full_features.set_xlim(1023.85, 1024.15)
     full_features.tick_params(left=False)
