@@ -88,8 +88,8 @@ if __name__=="__main__":
 
     #training_dataset_sweep()
     #evaluate_pretrained_probes(save_dir="probe_evals")
-    leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005, 0], mode_list=["absolute"])
-    gated_training_sweep([80], ["standard"])
+    #leaky_topk_training_sweep(k_list=[75, 100], epsilon_list=[0.005, 0], mode_list=["absolute"])
+    #gated_training_sweep([80], ["standard"])
 
     #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     #sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
@@ -102,14 +102,14 @@ if __name__=="__main__":
     probe = Constant_Probe(sae_to_probe, input_dim=1024)
     train_probe(probe, "constant_probe", train_params=training_params, eval_after=True) """
 
-    layer = 3
+    """ layer = 3
     coeff = 1.7
     num_features = 1024
     gpt = load_pre_trained_gpt(probe_layer=layer)
     sae = SAEAnthropic(gpt, num_features, coeff)
     sae_name = f"anthropic_sae_coeff={coeff}_features={num_features}"
     print(f"\nBeginning training of {sae_name}.")
-    train_and_test_sae(sae, sae_name)
+    train_and_test_sae(sae, sae_name) """
     
     """ k = 100
     sae = Leaky_Topk_SAE(gpt, num_features, epsilon=0, k=k)
@@ -128,21 +128,19 @@ if __name__=="__main__":
                 print(f"Beginning training of {sae_name}")
                 train_and_test_sae(sae, sae_name) """
     
-    """ gpt = load_pre_trained_gpt(probe_layer=3)
+    gpt = load_pre_trained_gpt(probe_layer=3)
     epsilon = 0.01
-    deltas = [1, 5, 10]
+    deltas = [0.25, 0.5, 1]
     for delta in deltas:
         if delta == 1:
-            coeffs = [40, 60, 80, 100]
-        elif delta == 5:
-            coeffs = [300, 400, 500, 600]
-        elif delta == 10:
-            coeffs = [400, 500, 600, 700]
+            coeffs = [5, 10, 15, 20, 25, 30, 35]
+        else:
+            coeffs = [0.5, 1, 2, 5, 10, 20, 40]
         for coeff in coeffs:
             sae = Smoothed_L0_SAE(gpt, 1024, coeff, epsilon, delta)
             sae_name = f"smoothed_L0_coeff={coeff}_delta={delta}_epsilon={epsilon}"
             print(f"Beginning training of {sae_name}")
-            train_and_test_sae(sae, sae_name) """
+            train_and_test_sae(sae, sae_name)
 
     
     """ test_train_size = 1000
