@@ -5,11 +5,12 @@ from abc import ABC, abstractmethod
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torcheval.metrics import BinaryAUROC
+import copy
 
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
 from EWOthello.mingpt.probe_model import BatteryProbeClassification
 from EWOthello.mingpt.dataset import CharDataset
-from board_states import get_board_states
+from saes.board_states import get_board_states
 
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
@@ -38,6 +39,17 @@ class SAETemplate(torch.nn.Module, ABC):
             self.residual_stream_mean=torch.zeros((1))
             self.average_residual_stream_norm=torch.ones((1))
             logger.warning("Please ensure the correct files are in saes/model_params/residual_stream_mean.pkl and saes/model_params/average_residual_stream_norm.pkl!")
+
+    def create_linear_encoder_decoder(self, decoder_initialization_scale):
+        residual_stream_size=self.gpt.pos_emb.shape[-1]
+        decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
+        decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=1).unsqueeze(-1) # columns of norm 1
+        decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
+        encoder=torch.nn.Parameter(torch.clone(decoder_initial_value).transpose(0,1).detach())
+        encoder_bias=torch.nn.Parameter(torch.zeros((self.num_features)))
+        decoder=torch.nn.Parameter(decoder_initial_value)
+        decoder_bias=torch.nn.Parameter(torch.zeros((residual_stream_size)))
+        return encoder, encoder_bias, decoder, decoder_bias
 
     def trim_to_window(self, input, offset=0):
         '''
@@ -122,11 +134,14 @@ class SAETemplate(torch.nn.Module, ABC):
         optimizer=torch.optim.AdamW(self.parameters(), lr=learning_rate)
         step=0
         report_on_batch_number=report_every_n_data//batch_size
+
+        self.training_prep(train_dataset=train_dataset, eval_dataset=eval_dataset, batch_size=batch_size, num_epochs=num_epochs)
+
         print(f"Beginning model training on {device}!")
 
         for epoch in range(num_epochs):
             train_dataloader=iter(torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True))
-            print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_data*batch_size} games.")
+            print(f"Beginning epoch {epoch+1}/{num_epochs}. Epoch duration is {len(train_dataloader)} steps, will evaluate every {report_every_n_data} games.")
             
             for input_batch, label_batch in tqdm(train_dataloader):
                 input_batch=input_batch.to(device)
@@ -136,11 +151,26 @@ class SAETemplate(torch.nn.Module, ABC):
                 loss, residual_stream, hidden_layer, reconstructed_residual_stream= self.forward_on_tokens(input_batch, compute_loss=True)
                 loss.backward()
                 optimizer.step()
+
                 if step % report_on_batch_number==0:
                     self.print_evaluation(loss, eval_dataset, step_number=step)
+
+                self.after_step_update(hidden_layer=hidden_layer, step=step)
         else:
             self.print_evaluation(train_loss=loss, eval_dataset=eval_dataset, step_number="Omega")
         self.eval()
+
+    def training_prep(self, train_dataset=None, eval_dataset=None, batch_size=None, num_epochs=None):
+        '''
+        for anything additional that needs to be done before training starts
+        '''
+        return
+    
+    def after_step_update(self, hidden_layer=None, step=None):
+        '''
+        for anything additional that needs to be done after each training step
+        '''
+        return
 
     def model_specs_to_string(self, eval_dataset=None):
         '''
@@ -148,14 +178,14 @@ class SAETemplate(torch.nn.Module, ABC):
         '''
         information=[f"Model type: {type(self)}", 
                      f"Number of features: {self.num_features}", 
-                     f"Number of parameters: {sum([param.numel() for param in self.parameters()])}", 
+                     f"Number of parameters: {sum([param.numel() for param in self.parameters() if param.requires_grad])}", 
                      f"Number of games trained on: {self.num_data_trained_on}"]
         information.extend(self.report_model_specific_features())
         information.extend([f"Classifications:",
                             f"    Number of SMD>2 classifiers (None=not evaluated): {self.num_classifier_above_threshold(metric_name='classifier_smds', threshold=2)}",
-                            f"    Average classifer SMD (None=not evaluated): {self.average_classifier_score(metric_name='classifier_smds')}",
+                            f"    Average classifier SMD (None=not evaluated): {self.average_classifier_score(metric_name='classifier_smds')}",
                             f"    Number of AUROC>.9 classifiers (None=not evaluated): {self.num_classifier_above_threshold()}",
-                            f"    Average classifer AUROC (None=not evaluated): {self.average_classifier_score()}",
+                            f"    Average classifier AUROC (None=not evaluated): {self.average_classifier_score()}",
                             ])
         if eval_dataset:
             losses, residual_streams, hidden_layers, reconstructed_residual_streams=self.catenate_outputs_on_dataset(eval_dataset, include_loss=True)
@@ -169,6 +199,7 @@ class SAETemplate(torch.nn.Module, ABC):
                 f"    Reconstruction Loss: {reconstruction_error:.3f}",
                 f"    L0 Sparsity: {l0_sparsity:.1f}", 
                 f"    Dead features: {dead_features:.0f}", ])
+            information.extend(self.report_model_specific_eval_results(hidden_layers=hidden_layers))
         return "\n".join(information)
 
     def report_model_specific_features(self):
@@ -176,6 +207,14 @@ class SAETemplate(torch.nn.Module, ABC):
         returns a list of strings, describing features specific to the type of SAE, such as hyperparameters
         '''
         return ["No model-specific features"]
+    
+    #just takes hidden_layers for now, but feel free to add other inputs as needed
+    def report_model_specific_eval_results(self, hidden_layers=None):
+        '''
+        returns a list of strings, describing eval results specific to the type of SAE, such as different types of sparsity measures
+        '''
+        return []
+
 
     @abstractmethod
     def forward(self, residual_stream, compute_loss=False):
@@ -219,7 +258,7 @@ class SAETemplate(torch.nn.Module, ABC):
         self.classifier_aurocs=aurocs
 
     @torch.inference_mode()
-    def compute_all_smd(self, evaluation_dataset:DataLoader, alternate_players=True):
+    def compute_all_smd(self, evaluation_dataset:DataLoader, alternate_players=True, epsilon=1e-6):
         '''
         computes aurocs of each sae feature on the entire evaluation_dataset
         returns a shape (N,64,3) tensor, where N is the number of features
@@ -234,19 +273,18 @@ class SAETemplate(torch.nn.Module, ABC):
         hidden_layers=hidden_layers[game_not_ended_mask]
         board_states=board_states[game_not_ended_mask]
         standardized_mean_distances=torch.zeros((hidden_layers.shape[1], board_states.shape[1], 3))
-        for i, feature_activation in tqdm(enumerate(hidden_layers.transpose(0,1))):
-            feature_stdev=feature_activation.std()
-            for j, board_position in enumerate(board_states.transpose(0,1)):
-                for k, piece_class in enumerate([0,1,2]):
-                    if j in [27,28,35,36] and k==1:
-                        #center pieces are never empty
-                        continue
-                    is_target_piece=board_position==piece_class
-                    first_mean=feature_activation[is_target_piece].mean()
-                    second_mean=feature_activation[~ is_target_piece].mean()
-                    smd=torch.abs(first_mean-second_mean)/feature_stdev
-                    standardized_mean_distances[i,j,k]=smd
-        self.classifier_smds=standardized_mean_distances
+        feature_stdevs=hidden_layers.std(dim=0)+epsilon
+        for j, board_position in tqdm(enumerate(board_states.transpose(0,1))):
+            for k, piece_class in enumerate([0,1,2]):
+                if j in [27,28,35,36] and k==1:
+                    #center pieces are never empty
+                    continue
+                is_target_piece=board_position==piece_class
+                first_mean=hidden_layers[is_target_piece].mean(dim=0)
+                second_mean=hidden_layers[~ is_target_piece].mean(dim=0)
+                smd=torch.abs(first_mean-second_mean)/feature_stdevs
+                standardized_mean_distances[:,j,k]=smd
+        self.classifier_smds=standardized_mean_distances        
 
     def num_classifier_above_threshold(self, metric_name="classifier_aurocs", threshold=.9):
         '''
@@ -275,6 +313,30 @@ class SAETemplate(torch.nn.Module, ABC):
         best_scores=metric.max(dim=0).values
         return float(torch.mean(best_scores))
     
+    def create_feature_subset_SAE(self, new_feature_indices:list):
+        '''
+        makes and returns a copy of this sae but restricted to just the features at new_feature_indices
+        '''
+        new_sae=copy.deepcopy(self)
+        new_sae.num_features=len(new_feature_indices)
+        new_sae.classifier_aurocs=None #reset metric
+        new_sae.classifier_smds=None #reset metric
+        try:
+            new_sae.encoder=torch.nn.Parameter(self.encoder[:,new_feature_indices])
+            new_sae.decoder=torch.nn.Parameter(self.decoder[new_feature_indices])
+            new_sae.encoder_bias=torch.nn.Parameter(self.encoder_bias[new_feature_indices])
+        except AttributeError:
+            pass
+        new_sae.post_copying_update(self, new_feature_indices)
+        return new_sae
+
+    def post_copying_update(self, original_sae, new_feature_indices):
+        '''
+        called on self after it is generated by create_feature_subset_SAE()
+        makes any architecture-specific changes based on the old SAE and the new one (e.g. changing the number of active features) 
+        '''
+        pass
+
 class SAEPretrainedProbes(SAETemplate):
     def __init__(self, gpt: GPTforProbing, probe_layer: int, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, window_start_trim, window_end_trim)
@@ -291,3 +353,5 @@ class SAEPretrainedProbes(SAETemplate):
         loss = None
         return loss, residual_stream, logits, residual_stream
 
+def load_sae(sae_location) -> SAETemplate:
+    return torch.load(sae_location, map_location=device)
