@@ -104,7 +104,7 @@ class Gated_SAE(SAEAnthropic):
             encoder = self.encoder
         encoding = (residual_stream - self.decoder_bias) @ encoder
         if self.no_aux_loss:
-            hidden_layer = F.relu(encoding + self.b_gate) * torch.exp(self.r_mag) + self.b_mag #is b_mag really necessary here?
+            hidden_layer = F.relu(F.relu(encoding + self.b_gate) * torch.exp(self.r_mag) + self.b_mag) #is b_mag really necessary here?
         else:
             hidden_layer_before_gating = F.relu(encoding * torch.exp(self.r_mag) + self.b_mag)
             hidden_layer = ((encoding + self.b_gate) > 0) * hidden_layer_before_gating
@@ -145,15 +145,16 @@ class ActivationQueue:
         return torch.sum(list_as_tensor**last_p) / torch.sum(list_as_tensor**next_p)
 
 class P_Annealing_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, anneal_start: int, p_end=0.2, queue_length=10, decoder_initialization_scale=0.1):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, anneal_proportion: float, p_end=0.2, queue_length=10, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
         self.p = 1
-        self.anneal_start = anneal_start
+        self.anneal_proportion = anneal_proportion
         self.p_end = p_end
         self.queue = ActivationQueue(queue_length)
     
     def training_prep(self, train_dataset=None, eval_dataset=None, batch_size=None, num_epochs=None):
         num_steps = len(train_dataset) * num_epochs / batch_size
+        self.anneal_start = round(num_steps*(1-self.anneal_proportion))
         self.p_step = (1 - self.p_end)/(num_steps - self.anneal_start)
         return
     
@@ -167,7 +168,18 @@ class P_Annealing_SAE(SAEAnthropic):
         return
     
     def sparsity_loss_function(self, hidden_layer):
-        return torch.norm(hidden_layer, p=self.p, dim=-1).sum() / hidden_layer.numel()
+        return (hidden_layer**self.p).mean()
+    
+class Gated_P_Annealing_SAE(P_Annealing_SAE, Gated_SAE):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, anneal_proportion: float, p_end=0.2, queue_length=10, no_aux_loss=False, decoder_initialization_scale=0.1):
+        P_Annealing_SAE.__init__(self, gpt, num_features, sparsity_coefficient, anneal_proportion, p_end, queue_length, decoder_initialization_scale)
+        Gated_SAE.__init__(self, gpt, num_features, sparsity_coefficient, no_aux_loss=no_aux_loss)
+
+    def forward(self, residual_stream, compute_loss=False):
+        return Gated_SAE.forward(self, residual_stream, compute_loss)
+
+    def sparsity_loss_function(self, hidden_layer):
+        return P_Annealing_SAE.sparsity_loss_function(self, hidden_layer)
 
 class Smoothed_L0_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, epsilon: float, delta: float):
@@ -183,7 +195,18 @@ class Smoothed_L0_SAE(SAEAnthropic):
         return torch.mean(smoothed_piecewise(normalized_hidden_layer, functions, transitions))
     
     def report_model_specific_eval_results(self, hidden_layers=None):
-        [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
+        return [f"    Average activations over epsilon: {torch.sum(hidden_layers > self.epsilon)/hidden_layers[..., 0].numel():.1f}"]
+    
+class Gated_Smoothed_L0_SAE(Smoothed_L0_SAE, Gated_SAE):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, epsilon:float, delta:float, no_aux_loss=False):
+        Smoothed_L0_SAE.__init__(self, gpt, num_features, sparsity_coefficient, epsilon, delta)
+        Gated_SAE.__init__(self, gpt, num_features, sparsity_coefficient, no_aux_loss=no_aux_loss)
+
+    def forward(self, residual_stream, compute_loss=False):
+        return Gated_SAE.forward(self, residual_stream, compute_loss)
+
+    def sparsity_loss_function(self, hidden_layer):
+        return Smoothed_L0_SAE.sparsity_loss_function(self, hidden_layer)
     
 class Without_TopK_SAE(SAEAnthropic):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int):
