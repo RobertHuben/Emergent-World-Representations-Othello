@@ -258,7 +258,7 @@ class SAETemplate(torch.nn.Module, ABC):
         self.classifier_aurocs=aurocs
 
     @torch.inference_mode()
-    def compute_all_smd(self, evaluation_dataset:DataLoader, alternate_players=True):
+    def compute_all_smd(self, evaluation_dataset:DataLoader, alternate_players=True, epsilon=1e-6):
         '''
         computes aurocs of each sae feature on the entire evaluation_dataset
         returns a shape (N,64,3) tensor, where N is the number of features
@@ -273,7 +273,7 @@ class SAETemplate(torch.nn.Module, ABC):
         hidden_layers=hidden_layers[game_not_ended_mask]
         board_states=board_states[game_not_ended_mask]
         standardized_mean_distances=torch.zeros((hidden_layers.shape[1], board_states.shape[1], 3))
-        feature_stdevs=hidden_layers.std(dim=0)+1e-10
+        feature_stdevs=hidden_layers.std(dim=0)+epsilon
         for j, board_position in tqdm(enumerate(board_states.transpose(0,1))):
             for k, piece_class in enumerate([0,1,2]):
                 if j in [27,28,35,36] and k==1:
@@ -353,3 +353,5 @@ class SAEPretrainedProbes(SAETemplate):
         loss = None
         return loss, residual_stream, logits, residual_stream
 
+def load_sae(sae_location) -> SAETemplate:
+    return torch.load(sae_location, map_location=device)
