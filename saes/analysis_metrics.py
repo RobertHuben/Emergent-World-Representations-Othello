@@ -30,7 +30,7 @@ def calculate_mcs_between_two_saes(sae_1, sae_2, eps=1e-6):
     mcs=cos_sims.max(dim=0).values
     return mcs
 
-def cosine_similarities(tensor_1:torch.Tensor, tensor_2:torch.Tensor, eps=1e-6):
+def cosine_similarities(tensor_1:torch.Tensor, tensor_2:torch.Tensor, eps=1e-10):
     '''
     tensor_1 is of shape (D,N1)
     tensor_2 is of shape (D,N2)
