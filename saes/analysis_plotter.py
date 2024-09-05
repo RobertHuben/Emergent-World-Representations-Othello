@@ -7,9 +7,9 @@ from matplotlib import pyplot as plt
 import diptest
 import re
 
+from saes.sae_template import load_sae
 from saes.utils import load_datasets_automatic
 from saes.analysis_metrics import compute_feature_frequency
-from saes.board_states import get_board_states
 from saes.board_states import get_board_states
 from saes.probes import Gated_Probe
 
@@ -60,8 +60,7 @@ def plot_smd_auroc_distributions(sae, save_dir=None):
 
 
 def plot_accuracies(sae_location, save_location=None):
-    with open(sae_location, 'rb') as f:
-        sae = torch.load(f, map_location=device)
+    sae = load_sae(sae_location)
     class_names=["Enemy", "Blank", "Own"]
     fig, axes = plt.subplots(1,3, constrained_layout=True)
 
@@ -72,6 +71,24 @@ def plot_accuracies(sae_location, save_location=None):
         axes[i].set_title(f"SMD of {class_names[i]}")
     
     fig.suptitle("SMD of classification by target class")
+    fig.colorbar(im)
+    if save_location:
+        plt.savefig(save_location)
+    else:
+        plt.show()
+
+def plot_accuracies_aurocs(sae_location, save_location=None):
+    sae = load_sae(sae_location)
+    class_names=["Enemy", "Blank", "Own"]
+    fig, axes = plt.subplots(1,3, constrained_layout=True)
+
+    for i in range(3):
+        data=sae.classifier_aurocs[:,:,i].max(dim=0).values
+        data=data.reshape((8,8))
+        im=axes[i].imshow(data, vmin=0, vmax=1)
+        axes[i].set_title(f"AUROCs of {class_names[i]}")
+    
+    fig.suptitle("AUROCs of classification by target class")
     fig.colorbar(im)
     if save_location:
         plt.savefig(save_location)
@@ -315,8 +332,11 @@ if __name__=="__main__":
                     'trained_models/07_30_saeAnthropic_layer_3_1024_features_1_sparsity.pkl',
                     'trained_models/07_30_saeAnthropic_layer_4_1024_features_1_sparsity.pkl',
                     'trained_models/07_30_saeAnthropic_layer_5_1024_features_1_sparsity.pkl',
+                    'trained_models/08_26_anthropic_sae_coeff=1.7_features=1024_aurocs_computed.pkl',
+
     ]
-    for sae_location in sae_locations:
-        sae=torch.load(sae_location, map_location=device)
-        board_state_frequency_vs_smd(sae, include_aurocs=False, sae_title=sae_location)
-    plt.show()
+    # for sae_location in sae_locations:
+    #     sae=torch.load(sae_location, map_location=device)
+    #     board_state_frequency_vs_smd(sae, include_aurocs=False, sae_title=sae_location)
+    # plt.show()
+    plot_accuracies_aurocs(sae_locations[-1], save_location="foo.png")
