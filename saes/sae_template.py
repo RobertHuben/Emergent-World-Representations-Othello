@@ -5,12 +5,14 @@ from abc import ABC, abstractmethod
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torcheval.metrics import BinaryAUROC
+from torcheval.metrics.functional import binary_f1_score
 import copy
 
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
 from EWOthello.mingpt.probe_model import BatteryProbeClassification
 from EWOthello.mingpt.dataset import CharDataset
 from saes.board_states import get_board_states
+from saes.utils_basic import vectorized_f1_score
 
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
@@ -32,6 +34,7 @@ class SAETemplate(torch.nn.Module, ABC):
         self.num_data_trained_on=0
         self.classifier_aurocs=None
         self.classifier_smds=None
+        self.classifier_f1_scores=None
         try:
             self.residual_stream_mean=torch.load("saes/model_params/residual_stream_mean.pkl", map_location=device)
             self.average_residual_stream_norm=torch.load("saes/model_params/average_residual_stream_norm.pkl", map_location=device)
@@ -186,6 +189,7 @@ class SAETemplate(torch.nn.Module, ABC):
                             f"    Average classifier SMD (None=not evaluated): {self.average_classifier_score(metric_name='classifier_smds')}",
                             f"    Number of AUROC>.9 classifiers (None=not evaluated): {self.num_classifier_above_threshold()}",
                             f"    Average classifier AUROC (None=not evaluated): {self.average_classifier_score()}",
+                            f"    Coverage (average best f1): {self.compute_coverage()}",
                             ])
         if eval_dataset:
             losses, residual_streams, hidden_layers, reconstructed_residual_streams=self.catenate_outputs_on_dataset(eval_dataset, include_loss=True)
@@ -285,6 +289,74 @@ class SAETemplate(torch.nn.Module, ABC):
                 smd=torch.abs(first_mean-second_mean)/feature_stdevs
                 standardized_mean_distances[:,j,k]=smd
         self.classifier_smds=standardized_mean_distances        
+
+    @torch.inference_mode()
+    def compute_all_f1_vectorized(self, evaluation_dataset:DataLoader, alternate_players=True, num_thresholds=10,):
+        '''
+        computes f1 scores of each sae feature on the entire evaluation_dataset, across a range of f1 thresholds
+        returns a shape (N,T,64,3) tensor, where N is the number of features, T is the number of thresholds
+        alters the self state by writing the value of self.classifier_f1_scores
+        '''
+        _, hidden_layers, __=self.catenate_outputs_on_dataset(evaluation_dataset, include_loss=False)
+        board_states= get_board_states(evaluation_dataset,alternate_players=alternate_players)
+        board_states=self.trim_to_window(board_states)
+        hidden_layers=hidden_layers.flatten(end_dim=-2)
+        board_states=board_states.flatten(end_dim=-2)
+        game_not_ended_mask=board_states[:,0]>-100
+        hidden_layers=hidden_layers[game_not_ended_mask]
+        board_states=board_states[game_not_ended_mask]
+        max_activations=hidden_layers.max(dim=0).values
+        hidden_layers=hidden_layers/max_activations
+        thresholds=torch.tensor([idx/num_thresholds for idx in range(num_thresholds)]).to(device)
+        f1s=torch.zeros((hidden_layers.shape[1], num_thresholds, board_states.shape[1], 3))
+        for j, board_position in tqdm(enumerate(board_states.transpose(0,1))):
+            for k, piece_class in enumerate([0,1,2]):
+                is_target_piece=board_position==piece_class
+                f1s[:,:,j,k]= vectorized_f1_score(hidden_layers, is_target_piece, thresholds)
+        self.classifier_f1_scores=f1s
+
+    @torch.inference_mode()
+    def compute_all_f1_slow(self, evaluation_dataset:DataLoader, alternate_players=True, num_thresholds=10,):
+        '''
+        warning: this method is slow. it is recommended to use compute_all_f1_vectorized() instead
+        computes f1 scores of each sae feature on the entire evaluation_dataset, across a range of f1 thresholds
+        returns a shape (N,T,64,3) tensor, where N is the number of features, T is the number of thresholds
+        alters the self state by writing the value of self.classifier_f1_scores
+        '''
+        _, hidden_layers, __=self.catenate_outputs_on_dataset(evaluation_dataset, include_loss=False)
+        board_states= get_board_states(evaluation_dataset,alternate_players=alternate_players)
+        board_states=self.trim_to_window(board_states)
+        hidden_layers=hidden_layers.flatten(end_dim=-2)
+        board_states=board_states.flatten(end_dim=-2)
+        game_not_ended_mask=board_states[:,0]>-100
+        hidden_layers=hidden_layers[game_not_ended_mask]
+        board_states=board_states[game_not_ended_mask]
+        f1s=torch.zeros((hidden_layers.shape[1], num_thresholds, board_states.shape[1], 3))
+        thresholds=torch.tensor([idx/num_thresholds for idx in range(num_thresholds)], device=device)
+        for i, feature_activation in tqdm(enumerate(hidden_layers.transpose(0,1))):
+            this_max_activation=float(feature_activation.max())
+            for j, board_position in enumerate(board_states.transpose(0,1)):
+                for k, piece_class in enumerate([0,1,2]):
+                    for l, threshold in enumerate(thresholds):
+                        is_target_piece=(board_position==piece_class).to(device)
+                        this_f1 = binary_f1_score(feature_activation, 
+                                                  is_target_piece.int(), 
+                                                  threshold=threshold*this_max_activation)
+                        f1s[i,l,j,k]=this_f1
+        self.classifier_f1_scores=f1s
+
+    def compute_coverage(self):
+        '''
+        computes the coverage as defined in Karvonen et al (https://arxiv.org/pdf/2408.00113)
+        finds the best f1 scores per position, and averages those
+        '''
+        if self.classifier_f1_scores is None:
+            return None
+        own_enemy_classifier_f1_scores=self.classifier_f1_scores[:,:,:,[0,2]]
+        print(own_enemy_classifier_f1_scores.shape)
+        reshaped_f1_scores=own_enemy_classifier_f1_scores.flatten(start_dim=0, end_dim=1).flatten(start_dim=1, end_dim=2)
+        best_f1s=reshaped_f1_scores.max(dim=0).values
+        return float(best_f1s.mean())
 
     def num_classifier_above_threshold(self, metric_name="classifier_aurocs", threshold=.9):
         '''
