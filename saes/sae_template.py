@@ -12,7 +12,7 @@ from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_
 from EWOthello.mingpt.probe_model import BatteryProbeClassification
 from EWOthello.mingpt.dataset import CharDataset
 from saes.board_states import get_board_states
-from saes.utils_basic import vectorized_f1_score
+from saes.utils import vectorized_f1_score
 
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
