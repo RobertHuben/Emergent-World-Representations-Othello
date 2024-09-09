@@ -90,13 +90,13 @@ class MultiHeadedTopKSAE(SAETemplate):
 #currently uses tied weights only
 #to try: untied weights original version, as well as using sigmoid instead of step function for training to avoid aux_loss
 class Gated_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, no_aux_loss=False, mode=None, decoder_initialization_scale=0.1):
+    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, no_aux_loss=False, sigmoid_act_coeff=False, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
         self.b_gate = self.encoder_bias #just renaming to make this more clear
         self.r_mag = torch.nn.Parameter(torch.zeros((num_features)))
         self.b_mag = torch.nn.Parameter(torch.zeros((num_features)))
         self.no_aux_loss = no_aux_loss
-        self.mode = mode
+        self.sigmoid_act_coeff = sigmoid_act_coeff
 
     def forward(self, residual_stream, compute_loss=False):
         if self.no_aux_loss:
@@ -105,10 +105,8 @@ class Gated_SAE(SAEAnthropic):
             encoder = self.encoder
         encoding = (residual_stream - self.decoder_bias) @ encoder
         if self.no_aux_loss:
-            if self.mode == "no b_mag":
-                hidden_layer = F.relu(encoding + self.b_gate) * torch.exp(self.r_mag)
-            elif self.mode == "sigmoid activation":
-                hidden_layer = F.relu(torch.sigmoid(encoding + self.b_gate) * torch.exp(self.r_mag) + self.b_mag)
+            if self.sigmoid_act_coeff:
+                hidden_layer = F.relu(torch.sigmoid(self.sigmoid_act_coeff*(encoding + self.b_gate)) * torch.exp(self.r_mag) + self.b_mag)
             else:
                 hidden_layer = F.relu(F.relu(encoding + self.b_gate) * torch.exp(self.r_mag) + self.b_mag) #is b_mag really necessary here?
         else:
@@ -120,8 +118,8 @@ class Gated_SAE(SAEAnthropic):
         if compute_loss:
             reconstruction_loss=self.reconstruction_error(residual_stream, reconstructed_residual_stream)
 
-            if self.mode == "sigmoid activation":
-                hidden_layer_without_gating_or_mag = torch.sigmoid(encoding+self.b_gate)
+            if self.sigmoid_act_coeff:
+                hidden_layer_without_gating_or_mag = torch.sigmoid(self.sigmoid_act_coeff*(encoding+self.b_gate))
             else:
                 hidden_layer_without_gating_or_mag = F.relu(encoding+self.b_gate)
             sparsity_loss = self.sparsity_loss_function(hidden_layer_without_gating_or_mag)*self.sparsity_coefficient
