@@ -91,7 +91,7 @@ if __name__=="__main__":
     #training_dataset_sweep()
     #evaluate_pretrained_probes(save_dir="probe_evals")
     #leaky_topk_training_sweep(k_list=[60, 70, 80, 90, 100, 110, 120], epsilon_list=[0, 0.005, 0.01, 0.02, 0.04], mode_list=["absolute"])
-    gated_training_sweep([0.5, 0.75, 1, 1.25, 1.5, 2, 2.5], ["tied_weights_no_aux_loss"], ["", "no b_mag", "sigmoid activation"])
+    #gated_training_sweep([0.5, 0.75, 1, 1.25, 1.5, 2, 2.5], ["tied_weights_no_aux_loss"], ["", "no b_mag", "sigmoid activation"])
 
     #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     #sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
@@ -119,9 +119,9 @@ if __name__=="__main__":
     print(f"\nBeginning training of {sae_name}.")
     train_and_test_sae(sae, sae_name) """
 
-    """ gpt = load_pre_trained_gpt(probe_layer=3)
+    gpt = load_pre_trained_gpt(probe_layer=3)
     coeffs = [0.5, 1, 1.5, 2, 4, 8, 16, 32, 64]
-    anneal_proportions = [0.5]
+    anneal_proportions = [0.3, 0.4, 0.5, 0.6, 0.7]
     for coeff in coeffs:
         for anneal_prop in anneal_proportions:
             for no_aux_loss in [True, False]:
@@ -129,7 +129,7 @@ if __name__=="__main__":
                 sae_name = f"gated_p_anneal_coeff={coeff}_no_aux_loss={no_aux_loss}_anneal={anneal_prop}"
                 print(f"Beginning training of {sae_name}")
                 train_and_test_sae(sae, sae_name)
-     """
+    
     
     """ gpt = load_pre_trained_gpt(probe_layer=3)
     epsilon = 0.01
