@@ -119,7 +119,7 @@ if __name__=="__main__":
     print(f"\nBeginning training of {sae_name}.")
     train_and_test_sae(sae, sae_name) """
 
-    gpt = load_pre_trained_gpt(probe_layer=3)
+    """ gpt = load_pre_trained_gpt(probe_layer=3)
     coeffs = [0.5, 1, 1.5, 2, 4, 8, 16, 32, 64]
     anneal_proportions = [0.3, 0.4, 0.5, 0.6, 0.7]
     for coeff in coeffs:
@@ -128,10 +128,10 @@ if __name__=="__main__":
                 sae = Gated_P_Annealing_SAE(gpt, 1024, coeff, anneal_prop, no_aux_loss=no_aux_loss)
                 sae_name = f"gated_p_anneal_coeff={coeff}_no_aux_loss={no_aux_loss}_anneal={anneal_prop}"
                 print(f"Beginning training of {sae_name}")
-                train_and_test_sae(sae, sae_name)
+                train_and_test_sae(sae, sae_name) """
     
     
-    """ gpt = load_pre_trained_gpt(probe_layer=3)
+    gpt = load_pre_trained_gpt(probe_layer=3)
     epsilon = 0.01
     deltas = [0.25, 0.5, 1, 2.5]
     for delta in deltas:
@@ -146,7 +146,7 @@ if __name__=="__main__":
             sae_name = f"smoothed_L0_coeff={coeff}_delta={delta}_epsilon={epsilon}"
             print(f"Beginning training of {sae_name}")
             train_and_test_sae(sae, sae_name)
- """
+
     
     """ test_train_size = 1000
     full_train_size = 500000
