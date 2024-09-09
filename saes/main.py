@@ -5,14 +5,15 @@ sys.path.append(os.path.join( os.path.dirname ( __file__), os.path.pardir))
 import torch 
 from tqdm import tqdm
 
-from sae_template import SAEPretrainedProbes
-from architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE, P_Annealing_SAE, Smoothed_L0_SAE, Gated_P_Annealing_SAE, Gated_Smoothed_L0_SAE
-from utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
-from analysis_plotter import plot_smd_auroc_distributions
-from train import train_and_test_sae, test_train_params, train_probe, L1_Choice_Trainer
-from probes import ProbeDataset, LinearProbe, L1_Sparse_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, Pre_Chosen_Features_Gated_Probe, L1_Gated_Probe, K_Annealing_Gated_Probe, Constant_Probe, SAEforProbing, move_list_to_state_list
-from train import TrainingParams
-from utils import load_probe_datasets_automatic
+from saes.sae_template import SAEPretrainedProbes
+from saes.architectures import SAEAnthropic, Leaky_Topk_SAE, Gated_SAE, P_Annealing_SAE, Smoothed_L0_SAE, Gated_P_Annealing_SAE, Gated_Smoothed_L0_SAE
+from saes.utils import load_pre_trained_gpt, load_dataset, load_datasets_automatic
+from saes.analysis_plotter import plot_smd_auroc_distributions
+from saes.train import train_and_test_sae, test_train_params, train_probe, L1_Choice_Trainer
+from saes.probes import LinearProbe, L1_Sparse_Probe, Without_Topk_Sparse_Probe, Leaky_Topk_Probe, K_Annealing_Probe, Pre_Chosen_Features_Gated_Probe, L1_Gated_Probe, K_Annealing_Gated_Probe, Constant_Probe, SAEforProbing
+from saes.probe_datasets import ProbeDataset, move_list_to_state_list
+from saes.train import TrainingParams
+from saes.utils import load_probe_datasets_automatic
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -102,14 +103,14 @@ if __name__=="__main__":
     probe = Constant_Probe(sae_to_probe, input_dim=1024)
     train_probe(probe, "constant_probe", train_params=training_params, eval_after=True) """
 
-    """ layer = 3
+    layer = 3
     coeff = 1.7
     num_features = 1024
     gpt = load_pre_trained_gpt(probe_layer=layer)
     sae = SAEAnthropic(gpt, num_features, coeff)
     sae_name = f"anthropic_sae_coeff={coeff}_features={num_features}"
     print(f"\nBeginning training of {sae_name}.")
-    train_and_test_sae(sae, sae_name) """
+    train_and_test_sae(sae, sae_name)
     
     """ k = 100
     sae = Leaky_Topk_SAE(gpt, num_features, epsilon=0, k=k)

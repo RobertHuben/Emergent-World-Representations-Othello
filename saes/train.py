@@ -1,18 +1,20 @@
+import os
 import torch
 from typing import Union
-from sae_template import SAETemplate
-from probes import LinearProbe, ProbeDataset, SAEforProbing, L1_Sparse_Probe, Pre_Chosen_Features_Gated_Probe
-from EWOthello.mingpt.model import GPTforProbing
-from utils import load_datasets_automatic, load_probe_datasets_automatic
 from datetime import datetime
-import os
+
+from EWOthello.mingpt.model import GPTforProbing
+
+from saes.sae_template import SAETemplate
+from saes.probes import LinearProbe, ProbeDataset, SAEforProbing, L1_Sparse_Probe, Pre_Chosen_Features_Gated_Probe
+from saes.utils import load_datasets_automatic, load_probe_datasets_automatic
 from saes.sae_template import SAETemplate
 from saes.probes import LinearProbe, ProbeDataset
 from saes.utils import load_datasets_automatic
 
 class TrainingParams:
 
-    def __init__(self, lr=5e-4, num_train_data=1000000, num_test_data=1000, num_epochs=1, report_every_n_data=50000, compute_smd=True, compute_aurocs=False):
+    def __init__(self, lr=5e-4, num_train_data=1000000, num_test_data=1000, num_epochs=1, report_every_n_data=50000, compute_smd=True, compute_aurocs=False, compute_f1_scores=True):
         self.lr=lr
         self.num_train_data=num_train_data
         self.num_test_data=num_test_data
@@ -20,6 +22,7 @@ class TrainingParams:
         self.report_every_n_data=report_every_n_data
         self.compute_smd=compute_smd
         self.compute_aurocs=compute_aurocs
+        self.compute_f1_scores=compute_f1_scores
 
 default_train_params=TrainingParams()
 test_train_params=TrainingParams(num_test_data=100, report_every_n_data=500)
@@ -44,6 +47,8 @@ def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingPara
         sae.compute_all_smd(test_dataset)
     if train_params.compute_aurocs:
         sae.compute_all_aurocs(test_dataset)
+    if train_params.compute_f1_scores:
+        sae.compute_all_f1_vectorized(test_dataset)
     this_message=sae.model_specs_to_string(test_dataset)
     if print_results:
         print(this_message)
