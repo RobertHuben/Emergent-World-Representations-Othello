@@ -106,9 +106,11 @@ class Gated_SAE(SAEAnthropic):
         encoding = (residual_stream - self.decoder_bias) @ encoder
         if self.no_aux_loss:
             if self.sigmoid_act_coeff:
-                hidden_layer = F.relu(torch.sigmoid(self.sigmoid_act_coeff*(encoding + self.b_gate)) * torch.exp(self.r_mag) + self.b_mag)
+                features_to_use = torch.sigmoid(self.sigmoid_act_coeff*(encoding + self.b_gate))
+                hidden_layer = F.relu(features_to_use * encoding * torch.exp(self.r_mag) + self.b_mag)
             else:
-                hidden_layer = F.relu(F.relu(encoding + self.b_gate) * torch.exp(self.r_mag) + self.b_mag) #is b_mag really necessary here?
+                features_to_use = F.relu(encoding + self.b_gate)
+                hidden_layer = F.relu(features_to_use * torch.exp(self.r_mag) + self.b_mag) #is b_mag really necessary here?
         else:
             hidden_layer_before_gating = F.relu(encoding * torch.exp(self.r_mag) + self.b_mag)
             hidden_layer = ((encoding + self.b_gate) > 0) * hidden_layer_before_gating
@@ -118,8 +120,8 @@ class Gated_SAE(SAEAnthropic):
         if compute_loss:
             reconstruction_loss=self.reconstruction_error(residual_stream, reconstructed_residual_stream)
 
-            if self.sigmoid_act_coeff:
-                hidden_layer_without_gating_or_mag = torch.sigmoid(self.sigmoid_act_coeff*(encoding+self.b_gate))
+            if self.no_aux_loss:
+                hidden_layer_without_gating_or_mag = features_to_use
             else:
                 hidden_layer_without_gating_or_mag = F.relu(encoding+self.b_gate)
             sparsity_loss = self.sparsity_loss_function(hidden_layer_without_gating_or_mag)*self.sparsity_coefficient
