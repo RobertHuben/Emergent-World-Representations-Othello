@@ -90,7 +90,7 @@ if __name__=="__main__":
 
     #training_dataset_sweep()
     #evaluate_pretrained_probes(save_dir="probe_evals")
-    leaky_topk_training_sweep(k_list=[85, 90, 95, 100, 105, 110], epsilon_list=[0, 0.0005, 0.001, 0.002, 0.004, 0.006, 0.008], mode_list=["absolute"])
+    #leaky_topk_training_sweep(k_list=[85, 90, 95, 100, 105, 110], epsilon_list=[0, 0.0005, 0.001, 0.002, 0.004, 0.006, 0.008], mode_list=["absolute"])
     #gated_training_sweep([0.5, 1, 2, 4, 8, 16, 32, 64, 128], ["tied_weights_no_aux_loss"], [0.5, 1, 2, 4, 8])
 
     #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
@@ -131,21 +131,23 @@ if __name__=="__main__":
                 train_and_test_sae(sae, sae_name) """
     
     
-    """ gpt = load_pre_trained_gpt(probe_layer=3)
+    gpt = load_pre_trained_gpt(probe_layer=3)
     epsilon = 0.01
     deltas = [0.25, 0.5, 1, 2.5]
     for delta in deltas:
-        if delta == 2.5:
-            coeffs = [60, 80, 100, 120, 140]
+        if delta == 0.25:
+            coeffs = [3, 4, 6, 7, 8, 9]
+        elif delta == 0.5:
+            coeffs = [12, 14, 16, 18, 22, 24, 26, 28, 30, 32]
         elif delta == 1:
-            coeffs = [10, 20, 30, 40, 50, 60]
-        else:
-            coeffs = [0.5, 1, 2, 5, 10, 20, 40]
+            coeffs = [24, 26, 28, 32, 34, 36, 38]
+        elif delta == 2.5:
+            coeffs = [70, 74, 78, 82, 86, 90, 94, 98]
         for coeff in coeffs:
             sae = Smoothed_L0_SAE(gpt, 1024, coeff, epsilon, delta)
             sae_name = f"smoothed_L0_coeff={coeff}_delta={delta}_epsilon={epsilon}"
             print(f"Beginning training of {sae_name}")
-            train_and_test_sae(sae, sae_name) """
+            train_and_test_sae(sae, sae_name)
 
     
     """ test_train_size = 1000
