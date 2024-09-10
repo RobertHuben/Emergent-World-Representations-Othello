@@ -90,8 +90,8 @@ if __name__=="__main__":
 
     #training_dataset_sweep()
     #evaluate_pretrained_probes(save_dir="probe_evals")
-    #leaky_topk_training_sweep(k_list=[60, 70, 80, 90, 100, 110, 120], epsilon_list=[0, 0.005, 0.01, 0.02, 0.04], mode_list=["absolute"])
-    gated_training_sweep([0.5, 1, 2, 4, 8, 16, 32, 64, 128], ["tied_weights_no_aux_loss"], [0.5, 1, 2, 4, 8])
+    leaky_topk_training_sweep(k_list=[85, 90, 95, 100, 105, 110], epsilon_list=[0, 0.0005, 0.001, 0.002, 0.004, 0.006, 0.008], mode_list=["absolute"])
+    #gated_training_sweep([0.5, 1, 2, 4, 8, 16, 32, 64, 128], ["tied_weights_no_aux_loss"], [0.5, 1, 2, 4, 8])
 
     #sae_location = "trained_models/for_analysis/07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
     #sae_location = "07_09_gated_tied_weights_no_aux_loss_coeff=1.5.pkl"
