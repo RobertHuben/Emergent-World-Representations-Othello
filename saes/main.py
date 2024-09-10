@@ -50,24 +50,23 @@ def leaky_topk_training_sweep(k_list:list, epsilon_list:list, mode_list:list, nu
                     print(f"\nBeginning training of {sae_name}.")
                     train_and_test_sae(sae, sae_name)
 
-def gated_training_sweep(sparsity_coeff_list:list, type_list:list, sigmoid_coeff_list=[False], num_features_list=[1024], layer=3):
+def gated_training_sweep(sparsity_coeff_list:list, type_list:list, num_features_list=[1024], layer=3):
     gpt = load_pre_trained_gpt(probe_layer=layer)
     for coeff in sparsity_coeff_list:
         for type in type_list:
             for num_features in num_features_list:
-                for sig_coeff in sigmoid_coeff_list:
-                    if type == "standard":
-                        no_aux_loss = False
-                    elif type == "tied_weights_no_aux_loss":
-                        no_aux_loss = True
-                    sae = Gated_SAE(gpt, num_features, coeff, no_aux_loss=no_aux_loss, sigmoid_act_coeff=sig_coeff)
-                    if num_features_list == [1024]:
-                        suffix=""
-                    else:
-                        suffix=f"_features={num_features}"
-                    sae_name = f"gated_{type}_coeff={coeff}_sigcoeff={sig_coeff}{suffix}"
-                    print(f"\nBeginning training of {sae_name}.")
-                    train_and_test_sae(sae, sae_name)
+                if type == "standard":
+                    no_aux_loss = False
+                elif type == "tied_weights_no_aux_loss":
+                    no_aux_loss = True
+                sae = Gated_SAE(gpt, num_features, coeff, no_aux_loss=no_aux_loss)
+                if num_features_list == [1024]:
+                    suffix=""
+                else:
+                    suffix=f"_features={num_features}"
+                sae_name = f"gated_{type}_coeff={coeff}{suffix}"
+                print(f"\nBeginning training of {sae_name}.")
+                train_and_test_sae(sae, sae_name)
 
 def L1_choice_probe_sweep(sae_locations:list, coeff_lists:list, train_size=500000):
     train_dataset, test_dataset = load_probe_datasets_automatic(train_size=train_size, test_size=1000)
@@ -133,18 +132,10 @@ if __name__=="__main__":
     
     gpt = load_pre_trained_gpt(probe_layer=3)
     epsilon = 0.01
-    deltas = [0.25, 0.5, 1, 2.5]
-    for delta in deltas:
-        if delta == 0.25:
-            coeffs = [3, 4, 6, 7, 8, 9]
-        elif delta == 0.5:
-            coeffs = [12, 14, 16, 18, 22, 24, 26, 28, 30, 32]
-        elif delta == 1:
-            coeffs = [24, 26, 28, 32, 34, 36, 38]
-        elif delta == 2.5:
-            coeffs = [70, 74, 78, 82, 86, 90, 94, 98]
-        for coeff in coeffs:
-            sae = Smoothed_L0_SAE(gpt, 1024, coeff, epsilon, delta)
+    delta = 0.25
+    coeffs = [1, 2, 4, 8, 12, 16, 32]
+    for coeff in coeffs:
+            sae = Gated_Smoothed_L0_SAE(gpt, 1024, coeff, epsilon, delta)
             sae_name = f"smoothed_L0_coeff={coeff}_delta={delta}_epsilon={epsilon}"
             print(f"Beginning training of {sae_name}")
             train_and_test_sae(sae, sae_name)
