@@ -133,10 +133,10 @@ if __name__=="__main__":
     gpt = load_pre_trained_gpt(probe_layer=3)
     epsilon = 0.01
     delta = 0.25
-    coeffs = [1, 2, 4, 8, 12, 16, 32]
+    coeffs = [64, 128]
     for coeff in coeffs:
             sae = Gated_Smoothed_L0_SAE(gpt, 1024, coeff, epsilon, delta)
-            sae_name = f"smoothed_L0_coeff={coeff}_delta={delta}_epsilon={epsilon}"
+            sae_name = f"gated_smoothed_L0_coeff={coeff}_delta={delta}_epsilon={epsilon}"
             print(f"Beginning training of {sae_name}")
             train_and_test_sae(sae, sae_name)
 
