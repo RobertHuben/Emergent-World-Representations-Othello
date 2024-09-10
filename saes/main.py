@@ -132,7 +132,7 @@ if __name__=="__main__":
     
     gpt = load_pre_trained_gpt(probe_layer=3)
     epsilon = 0.01
-    deltas = [0.5, 1.0, 2.5, 5.0]
+    deltas = [0.1]
     coeffs = [50, 100, 200, 300]
     for delta in deltas:
         for coeff in coeffs:
