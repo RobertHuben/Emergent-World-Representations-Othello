@@ -151,6 +151,7 @@ class P_Annealing_SAE(SAEAnthropic):
         self.anneal_proportion = anneal_proportion
         self.p_end = p_end
         self.queue = ActivationQueue(queue_length)
+        self.initial_sparsity_coefficient=sparsity_coefficient
     
     def training_prep(self, train_dataset=None, eval_dataset=None, batch_size=None, num_epochs=None):
         num_steps = len(train_dataset) * num_epochs / batch_size
@@ -169,6 +170,15 @@ class P_Annealing_SAE(SAEAnthropic):
     
     def sparsity_loss_function(self, hidden_layer):
         return (hidden_layer**self.p).mean()
+
+    def report_model_specific_features(self):
+        return [
+            f"Starting loss coefficient: {self.initial_sparsity_coefficient:.4f}",
+            f"Anneal Proportion: {self.anneal_proportion:.4f}",
+            f"p_start: 1",
+            f"p_end: {self.p_end}",
+            ]
+
     
 class Gated_P_Annealing_SAE(P_Annealing_SAE, Gated_SAE):
     def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, anneal_proportion: float, p_end=0.2, queue_length=10, no_aux_loss=False, decoder_initialization_scale=0.1):

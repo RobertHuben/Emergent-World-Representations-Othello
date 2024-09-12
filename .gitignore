@@ -1,4 +1,7 @@
 dev_code/*
+dev_code2/*
+EWOthello/*
+model_specs_comparisons/*
 .vscode
 connecting_to_server_notes.txt
 probe_evals/*
@@ -12,3 +15,5 @@ EWOthello/data/othello_synthetic_with_board_states/*
 EWOthello/data/othello_synthetic_with_board_states.zip
 saes/deprecated/*
 saes/test_methods/*
+saes/to_try.txt
+transfer/*

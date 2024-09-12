@@ -353,7 +353,6 @@ class SAETemplate(torch.nn.Module, ABC):
         if self.classifier_f1_scores is None:
             return None
         own_enemy_classifier_f1_scores=self.classifier_f1_scores[:,:,:,[0,2]]
-        print(own_enemy_classifier_f1_scores.shape)
         reshaped_f1_scores=own_enemy_classifier_f1_scores.flatten(start_dim=0, end_dim=1).flatten(start_dim=1, end_dim=2)
         best_f1s=reshaped_f1_scores.max(dim=0).values
         return float(best_f1s.mean())
