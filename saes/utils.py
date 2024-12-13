@@ -15,21 +15,23 @@ from saes.probe_datasets import ProbeDataset, ProbeDatasetPrecomputed
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
-def load_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1) -> CharDataset:
+def load_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1, game="othello") -> CharDataset:
     '''
     creates a test and train dataset of the given sizes.
     train_size and test_size must both be positive
     maximum dataset size: ~23M
     '''
     num_datasets_to_load=(test_size+train_size)//100000 + 1
-    othello = get(ood_num=-1, data_root=None, num_preload=num_datasets_to_load) # 11 corresponds to over 1 million games
 
+    game_data = get(game = game, ood_num=-1, data_root=None, num_preload=num_datasets_to_load) # 11 corresponds to over 1 million games
+    
     random.seed(shuffle_seed)
-    random.shuffle(othello.sequences)
-    train_othello, test_othello=copy(othello), copy(othello)
-    train_othello.sequences=othello.sequences[:train_size]
-    test_othello.sequences=othello.sequences[train_size:train_size+test_size]
-    return CharDataset(train_othello), CharDataset(test_othello)
+    random.shuffle(game_data.sequences)
+    train_game_data, test_game_data=copy(game_data), copy(game_data)
+    train_game_data.sequences=game_data.sequences[:train_size]
+    test_game_data.sequences=game_data.sequences[train_size:train_size+test_size]
+    return CharDataset(train_game_data), CharDataset(test_game_data)
+
 
 def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1, mode="precomputed"):
     if mode == "precomputed":

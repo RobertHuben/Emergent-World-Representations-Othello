@@ -81,8 +81,11 @@ def get_ood_game(_):
     return tbr
 
 
-def get(ood_perc=0.0, data_root=None, wthor=False, ood_num=1000, num_preload=10):
-    return Othello(ood_perc, data_root, wthor, ood_num, num_preload=num_preload)
+def get(game="othello", ood_perc=0.0, data_root=None, wthor=False, ood_num=1000, num_preload=10):
+    if game == "othello":
+        return Othello(ood_perc, data_root, wthor, ood_num, num_preload=num_preload)
+    elif game == "chess":
+        return Chess(data_root=data_root, num_preload=num_preload)
 
 
 def get_data_path(data_root):
@@ -207,6 +210,17 @@ class Othello:
         else:
             tbr = self.sequences[i]
         return tbr
+
+#todo: figure out how to load chess games and from where
+class Chess:
+    def __init__(self, data_root, num_preload):
+        self.sequences = []
+
+    def __len__(self):
+        return len(self.sequences)
+    
+    def __getitem__(self, i):
+        return self.sequences[i]
 
 
 class OthelloBoardState:
