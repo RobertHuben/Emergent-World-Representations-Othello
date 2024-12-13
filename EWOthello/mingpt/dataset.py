@@ -6,20 +6,30 @@ import numpy as np
 from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing
 from EWOthello.data.othello import OthelloBoardState
 
+chess_itos = {0: ' ', 1: '#', 2: '+', 3: '-', 4: '.', 5: '0', 6: '1', 7: '2', 8: '3', 9: '4', 10: '5', 11: '6', 12: '7', 13: '8', 14: '9', 15: ';', 16: '=', 17: 'B', 18: 'K', 19: 'N', 20: 'O', 21: 'Q', 22: 'R', 23: 'a', 24: 'b', 25: 'c', 26: 'd', 27: 'e', 28: 'f', 29: 'g', 30: 'h', 31: 'x'}
+chess_stoi = {' ': 0, '#': 1, '+': 2, '-': 3, '.': 4, '0': 5, '1': 6, '2': 7, '3': 8, '4': 9, '5': 10, '6': 11, '7': 12, '8': 13, '9': 14, ';': 15, '=': 16, 'B': 17, 'K': 18, 'N': 19, 'O': 20, 'Q': 21, 'R': 22, 'a': 23, 'b': 24, 'c': 25, 'd': 26, 'e': 27, 'f': 28, 'g': 29, 'h': 30, 'x': 31}
 
 class CharDataset(Dataset):
-    def __init__(self, data):
+    def __init__(self, data, game="othello"):
         if hasattr(data, "ood_perc"):
             ood_perc = data.ood_perc
             data.ood_perc = 0  # shut down the randomness
-        chars = sorted(list(set(list(itertools.chain.from_iterable(data)))) + [-100])
 
-        data_size, vocab_size = len(data), len(chars)  # vocab size 61, with -100 sorted to the front
+        if game == "othello":
+            chars = sorted(list(set(list(itertools.chain.from_iterable(data)))) + [-100])
+            self.stoi = {ch: i for i, ch in enumerate(chars)}
+            self.itos = {i: ch for i, ch in enumerate(chars)}
+            vocab_size = len(chars)  # vocab size 61, with -100 sorted to the front
+        elif game == "chess":
+            self.stoi = chess_stoi
+            self.itos = chess_itos
+            vocab_size = len(chess_stoi)
+
+        data_size = len(data)
         max_len = max([len(data[_]) for _ in range(len(data))])  # should be 60 in Othello
         print("Dataset created has %d sequences, %d unique words." % (data_size, vocab_size))
 
-        self.stoi = {ch: i for i, ch in enumerate(chars)}
-        self.itos = {i: ch for i, ch in enumerate(chars)}
+        self.game = game
         self.max_len = max_len
         self.block_size = max_len - 1  # for autoregressive training (always train on sequences of fixed max length, aka block)
         self.vocab_size = vocab_size
