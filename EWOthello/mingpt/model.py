@@ -241,6 +241,18 @@ class GPTforProbing(GPT):
         else:
             return x
 
+class AnyGPTforProbing(torch.nn.Module):
+    def __init__(self, gpt, game, output_size=None) -> None:
+        super().__init__()
+        self.gpt = gpt
+        self.game = game
+        self.output_size = output_size
+
+    def forward(self, idx):
+        output = self.gpt(idx)
+        if not self.output_size == None:
+            assert output.shape[0] == self.output_size
+        return output
 
 class GPTforProbing_v2(GPT):
     def __init__(self, config, probe_layer=-1, ln=False):

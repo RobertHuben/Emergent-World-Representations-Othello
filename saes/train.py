@@ -41,7 +41,8 @@ def train_and_test_sae(sae:SAETemplate, save_name:str, train_params:TrainingPara
         And returns the trained model
     todo: make the default training params argument the generic training params object
     '''
-    train_dataset, test_dataset = load_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data)
+
+    train_dataset, test_dataset = load_datasets_automatic(train_size=train_params.num_train_data, test_size=train_params.num_test_data, game=sae.gpt.game)
     sae.train_model(train_dataset, test_dataset, learning_rate=train_params.lr, report_every_n_data=train_params.report_every_n_data)
     if train_params.compute_smd:
         sae.compute_all_smd(test_dataset)

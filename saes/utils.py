@@ -8,7 +8,7 @@ from copy import copy
 from tqdm import tqdm
 
 from EWOthello.data.othello import get
-from EWOthello.mingpt.model import GPTConfig, GPTforProbing
+from EWOthello.mingpt.model import GPTConfig, GPTforProbing, AnyGPTforProbing
 from EWOthello.mingpt.dataset import CharDataset
 
 from saes.probe_datasets import ProbeDataset, ProbeDatasetPrecomputed
@@ -102,17 +102,31 @@ def load_dataset(split_fraction=1, use_first_half_of_split=True, entries_limit=F
     dataset=CharDataset(othello)
     return dataset
 
-def load_pre_trained_gpt(probe_path="EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/", probe_layer:int=3):
+othello_gpt_path = "EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/"
+chess_gpt_path = tbd
+
+def load_pre_trained_gpt(probe_path=None, game="othello", probe_layer:int=3):
     """
-    loads the model at probe_path and wires it to run through probe_layer
+    loads the corresponding model and wires it to run through probe_layer
     """
-    n_layer = int(probe_path[-5:-4])
-    n_head = int(probe_path[-3:-2])
-    mconf = GPTConfig(61, 59, n_layer=n_layer, n_head=n_head, n_embd=512)
-    GPT_probe = GPTforProbing(mconf, probe_layer)
-    
-    GPT_probe.load_state_dict(torch.load(probe_path + f"GPT_Synthetic_{n_layer}Layers_{n_head}Heads.ckpt", map_location=device))
-    GPT_probe.eval()
+
+    if game == "othello":
+        if probe_path == None:
+            probe_path = othello_gpt_path
+        n_layer = int(probe_path[-5:-4])
+        n_head = int(probe_path[-3:-2])
+        mconf = GPTConfig(61, 59, n_layer=n_layer, n_head=n_head, n_embd=512)
+        othello_probe = GPTforProbing(mconf, probe_layer)
+        
+        othello_probe.load_state_dict(torch.load(probe_path + f"GPT_Synthetic_{n_layer}Layers_{n_head}Heads.ckpt", map_location=device))
+        othello_probe.eval()
+        GPT_probe = AnyGPTforProbing(gpt=othello_probe, game=game)
+
+    elif game == "chess":
+        if probe_path == None:
+            probe_path = chess_gpt_path
+        chess_probe = tbd
+        GPT_probe = AnyGPTforProbing(gpt=chess_probe, game=game)
     return GPT_probe
 
 
