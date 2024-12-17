@@ -8,7 +8,7 @@ from torcheval.metrics import BinaryAUROC
 from torcheval.metrics.functional import binary_f1_score
 import copy
 
-from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
+from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, AnyGPTforProbing, GPTforProbing_v2
 from EWOthello.mingpt.probe_model import BatteryProbeClassification
 from EWOthello.mingpt.dataset import CharDataset
 from saes.board_states import get_board_states
@@ -22,7 +22,7 @@ class SAETemplate(torch.nn.Module, ABC):
     abstract base class that defines the SAE contract
     '''
 
-    def __init__(self, gpt:GPTforProbing, num_features:int, window_start_trim:int=4, window_end_trim:int=8):
+    def __init__(self, gpt:AnyGPTforProbing, num_features:int, window_start_trim:int=4, window_end_trim:int=8):
         super().__init__()
         self.gpt=gpt
         self.num_features=num_features
@@ -44,7 +44,7 @@ class SAETemplate(torch.nn.Module, ABC):
             logger.warning("Please ensure the correct files are in saes/model_params/residual_stream_mean.pkl and saes/model_params/average_residual_stream_norm.pkl!")
 
     def create_linear_encoder_decoder(self, decoder_initialization_scale):
-        residual_stream_size=self.gpt.pos_emb.shape[-1]
+        residual_stream_size=self.gpt.output_size
         decoder_initial_value=torch.randn((self.num_features, residual_stream_size))
         decoder_initial_value=decoder_initial_value/decoder_initial_value.norm(dim=1).unsqueeze(-1) # columns of norm 1
         decoder_initial_value*=decoder_initialization_scale # columns of norm decoder_initial_value
@@ -410,11 +410,11 @@ class SAETemplate(torch.nn.Module, ABC):
         pass
 
 class SAEPretrainedProbes(SAETemplate):
-    def __init__(self, gpt: GPTforProbing, probe_layer: int, window_start_trim: int, window_end_trim: int):
+    def __init__(self, gpt: AnyGPTforProbing, probe_layer: int, window_start_trim: int, window_end_trim: int):
         super().__init__(gpt, window_start_trim, window_end_trim)
         self.gpt.to(device)
 
-        residual_stream_size=gpt.pos_emb.shape[-1]
+        residual_stream_size=self.gpt.output_size
         probe = BatteryProbeClassification(device, probe_class=3, num_task=64, input_dim=residual_stream_size)
         probe_path = f"EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/linearProbe_Map_New_8L8H_GPT_Layer{probe_layer}.ckpt"
         probe.load_state_dict(torch.load(probe_path, map_location=device))

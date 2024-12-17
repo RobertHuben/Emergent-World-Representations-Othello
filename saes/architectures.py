@@ -3,7 +3,7 @@ from torch.nn import functional as F
 import logging
 import numpy as np
 
-from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, GPTforProbing_v2
+from EWOthello.mingpt.model import GPT, GPTConfig, GPTforProbing, AnyGPTforProbing, GPTforProbing_v2
 from saes.sae_template import SAETemplate
 
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ device='cuda' if torch.cuda.is_available() else 'cpu'
 
 class SAEAnthropic(SAETemplate):
 
-    def __init__(self, gpt:GPTforProbing, num_features:int, sparsity_coefficient:float, decoder_initialization_scale=0.1):
+    def __init__(self, gpt:AnyGPTforProbing, num_features:int, sparsity_coefficient:float, decoder_initialization_scale=0.1):
         super().__init__(gpt=gpt, num_features=num_features)
         self.sparsity_coefficient=sparsity_coefficient
         self.encoder, self.encoder_bias, self.decoder, self.decoder_bias=self.create_linear_encoder_decoder(decoder_initialization_scale)
@@ -46,7 +46,7 @@ class SAEDummy(SAETemplate):
     "SAE" whose hidden layer and reconstruction is just the unchanged residual stream
     '''
 
-    def __init__(self, gpt:GPTforProbing, num_features=1024):
+    def __init__(self, gpt:AnyGPTforProbing, num_features=1024):
         super().__init__(gpt=gpt, num_features=num_features)
         self.to(device)
 
@@ -55,7 +55,7 @@ class SAEDummy(SAETemplate):
 
 class MultiHeadedTopKSAE(SAETemplate):
 
-    def __init__(self, gpt:GPTforProbing, num_features:int, sparsity:int, num_heads:int, decoder_initialization_scale=0.1):
+    def __init__(self, gpt:AnyGPTforProbing, num_features:int, sparsity:int, num_heads:int, decoder_initialization_scale=0.1):
         super().__init__(gpt=gpt, num_features=num_features)
         self.sparsity=sparsity
         self.num_heads=num_heads
@@ -90,7 +90,7 @@ class MultiHeadedTopKSAE(SAETemplate):
 #currently uses tied weights only
 #to try: untied weights original version, as well as using sigmoid instead of step function for training to avoid aux_loss
 class Gated_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, no_aux_loss=False, decoder_initialization_scale=0.1):
+    def __init__(self, gpt: AnyGPTforProbing, num_features: int, sparsity_coefficient: float, no_aux_loss=False, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
         self.b_gate = self.encoder_bias #just renaming to make this more clear
         self.r_mag = torch.nn.Parameter(torch.zeros((num_features)))
@@ -149,7 +149,7 @@ class ActivationQueue:
         return torch.sum(list_as_tensor**last_p) / torch.sum(list_as_tensor**next_p)
 
 class P_Annealing_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, anneal_proportion: float, p_end=0.2, queue_length=10, decoder_initialization_scale=0.1):
+    def __init__(self, gpt: AnyGPTforProbing, num_features: int, sparsity_coefficient: float, anneal_proportion: float, p_end=0.2, queue_length=10, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features, sparsity_coefficient, decoder_initialization_scale)
         self.p = 1
         self.anneal_proportion = anneal_proportion
@@ -175,7 +175,7 @@ class P_Annealing_SAE(SAEAnthropic):
         return (hidden_layer**self.p).mean()
     
 class Gated_P_Annealing_SAE(P_Annealing_SAE, Gated_SAE):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, anneal_proportion: float, p_end=0.2, queue_length=10, no_aux_loss=False, decoder_initialization_scale=0.1):
+    def __init__(self, gpt: AnyGPTforProbing, num_features: int, sparsity_coefficient: float, anneal_proportion: float, p_end=0.2, queue_length=10, no_aux_loss=False, decoder_initialization_scale=0.1):
         P_Annealing_SAE.__init__(self, gpt, num_features, sparsity_coefficient, anneal_proportion, p_end, queue_length, decoder_initialization_scale)
         Gated_SAE.__init__(self, gpt, num_features, sparsity_coefficient, no_aux_loss=no_aux_loss)
 
@@ -186,7 +186,7 @@ class Gated_P_Annealing_SAE(P_Annealing_SAE, Gated_SAE):
         return P_Annealing_SAE.sparsity_loss_function(self, hidden_layer)
 
 class Smoothed_L0_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, epsilon: float, delta: float):
+    def __init__(self, gpt: AnyGPTforProbing, num_features: int, sparsity_coefficient: float, epsilon: float, delta: float):
         super().__init__(gpt, num_features, sparsity_coefficient)
         self.epsilon = epsilon
         self.delta = delta
@@ -202,7 +202,7 @@ class Smoothed_L0_SAE(SAEAnthropic):
         return [f"    Average activations over epsilon: {torch.sum(hidden_layers > self.epsilon)/hidden_layers[..., 0].numel():.1f}"]
     
 class Gated_Smoothed_L0_SAE(Smoothed_L0_SAE, Gated_SAE):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, epsilon:float, delta:float, no_aux_loss=False):
+    def __init__(self, gpt: AnyGPTforProbing, num_features: int, sparsity_coefficient: float, epsilon:float, delta:float, no_aux_loss=False):
         Smoothed_L0_SAE.__init__(self, gpt, num_features, sparsity_coefficient, epsilon, delta)
         Gated_SAE.__init__(self, gpt, num_features, sparsity_coefficient, no_aux_loss=no_aux_loss)
 
@@ -213,7 +213,7 @@ class Gated_Smoothed_L0_SAE(Smoothed_L0_SAE, Gated_SAE):
         return Smoothed_L0_SAE.sparsity_loss_function(self, hidden_layer)
     
 class Without_TopK_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int):
+    def __init__(self, gpt: AnyGPTforProbing, num_features: int, sparsity_coefficient: float, k: int, p: int):
         super().__init__(gpt, num_features, sparsity_coefficient)
         self.k = k
         self.p = p
@@ -228,14 +228,14 @@ class Without_TopK_SAE(SAEAnthropic):
 
     
 # class No_Sparsity_Loss_SAE(SAETemplate):
-#     def __init__(self, gpt: GPTforProbing, num_features: int, window_start_trim: int, window_end_trim: int):
+#     def __init__(self, gpt: AnyGPTforProbing, num_features: int, window_start_trim: int, window_end_trim: int):
 #         super().__init__(gpt, num_features, 0.0, window_start_trim, window_end_trim)
 #     def sparsity_loss_function(self, hidden_layer):
 #         return 0.0
 
 #suppression_mode can be "relative" or "absolute"
 class Leaky_Topk_SAE(SAETemplate):
-    def __init__(self, gpt: GPTforProbing, num_features: int, epsilon: float, k:int, suppression_mode="relative", decoder_initialization_scale=0.1):
+    def __init__(self, gpt: AnyGPTforProbing, num_features: int, epsilon: float, k:int, suppression_mode="relative", decoder_initialization_scale=0.1):
         super().__init__(gpt=gpt, num_features=num_features)
         self.epsilon = epsilon
         self.k=k
@@ -274,7 +274,7 @@ class Leaky_Topk_SAE(SAETemplate):
             self.k=len(new_feature_indices)
 
 class K_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
-    def __init__(self, gpt: GPTforProbing, num_features: int, epsilon: float, k_start: int, anneal_start: int, k_end: int, decoder_initialization_scale=0.1):
+    def __init__(self, gpt: AnyGPTforProbing, num_features: int, epsilon: float, k_start: int, anneal_start: int, k_end: int, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features, epsilon, k_start, decoder_initialization_scale)
         self.k_start = k_start
         self.anneal_start = anneal_start
@@ -297,7 +297,7 @@ class K_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
     
 
 class Epsilon_Annealing_Leaky_Topk_SAE(Leaky_Topk_SAE):
-    def __init__(self, gpt: GPTforProbing, num_features: int, k: int, epsilon_start: int, epsilon_end: int, decoder_initialization_scale=0.1, annealing_mode='linear'):
+    def __init__(self, gpt: AnyGPTforProbing, num_features: int, k: int, epsilon_start: int, epsilon_end: int, decoder_initialization_scale=0.1, annealing_mode='linear'):
         assert annealing_mode in ['linear', 'exponential']
         super().__init__(gpt, num_features, epsilon=epsilon_start, k=k, decoder_initialization_scale=decoder_initialization_scale)
         self.epsilon_start = epsilon_start
@@ -324,7 +324,7 @@ class Random_Leaky_Topk_SAE(Leaky_Topk_SAE):
     During training, each forward pass uses a random value of k from the distribution
     After training, forward uses k_mean for k by default, but you can override this by providing a value for k_eval
     '''
-    def __init__(self, gpt: GPTforProbing, num_features: int, epsilon: float, k_mean: int, distribution="poisson", k_std=None, decoder_initialization_scale=0.1):
+    def __init__(self, gpt: AnyGPTforProbing, num_features: int, epsilon: float, k_mean: int, distribution="poisson", k_std=None, decoder_initialization_scale=0.1):
         assert distribution in ["poisson", "normal"], "Distribution not recognized.  Only supports poisson and normal distributions."
         if distribution == "normal":
             assert k_std, "Need to input a standard deviation to use a normal distribution."
@@ -356,7 +356,7 @@ class Random_Leaky_Topk_SAE(Leaky_Topk_SAE):
         [f"    Average activations over epsilon: {torch.mean(hidden_layers > self.epsilon):.1f}"]
 
 class Top_L1_Proportion_SAE(SAETemplate):
-    def __init__(self, gpt: GPTforProbing, num_features: int, L1_proportion_to_remove: float, decoder_initialization_scale=0.1):
+    def __init__(self, gpt: AnyGPTforProbing, num_features: int, L1_proportion_to_remove: float, decoder_initialization_scale=0.1):
         super().__init__(gpt, num_features)
         self.proportion = L1_proportion_to_remove
         self.encoder, self.encoder_bias, self.decoder, self.decoder_bias=self.create_linear_encoder_decoder(decoder_initialization_scale)
@@ -393,7 +393,7 @@ class Top_L1_Proportion_SAE(SAETemplate):
         return final
 
 class Dimension_Reduction_SAE(SAEAnthropic):
-    def __init__(self, gpt: GPTforProbing, num_features: int, start_index: int, start_proportion: float, end_proportion: float, epsilon: float):
+    def __init__(self, gpt: AnyGPTforProbing, num_features: int, start_index: int, start_proportion: float, end_proportion: float, epsilon: float):
         super().__init__(gpt, num_features)
         self.start_index = start_index
         self.start_proportion = start_proportion

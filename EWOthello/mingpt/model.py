@@ -246,6 +246,10 @@ class AnyGPTforProbing(torch.nn.Module):
         super().__init__()
         self.gpt = gpt
         self.game = game
+        if output_size == None:
+            if game == "othello":
+                output_size = gpt.pos_emb.shape[-1]
+            #todo: add if statement for chess too
         self.output_size = output_size
 
     def forward(self, idx):

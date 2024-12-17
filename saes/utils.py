@@ -103,7 +103,8 @@ def load_dataset(split_fraction=1, use_first_half_of_split=True, entries_limit=F
     return dataset
 
 othello_gpt_path = "EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/"
-chess_gpt_path = tbd
+#todo: figure out how to load ChessGPT
+chess_gpt_path = "" #tbd
 
 def load_pre_trained_gpt(probe_path=None, game="othello", probe_layer:int=3):
     """
@@ -125,7 +126,7 @@ def load_pre_trained_gpt(probe_path=None, game="othello", probe_layer:int=3):
     elif game == "chess":
         if probe_path == None:
             probe_path = chess_gpt_path
-        chess_probe = tbd
+        chess_probe = None #load ChessGPT here
         GPT_probe = AnyGPTforProbing(gpt=chess_probe, game=game)
     return GPT_probe
 
