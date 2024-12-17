@@ -9,7 +9,7 @@ from tqdm import tqdm
 from transformers import GPT2LMHeadModel
 from nnsight import NNsight
 
-from EWOthello.data.othello import get
+from EWOthello.data.othello import get, chess_get
 from EWOthello.mingpt.model import GPTConfig, GPTforProbing, AnyGPTforProbing
 from EWOthello.mingpt.dataset import CharDataset
 
@@ -23,16 +23,18 @@ def load_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1, game=
     train_size and test_size must both be positive
     maximum dataset size: ~23M
     '''
-    num_datasets_to_load=(test_size+train_size)//100000 + 1
-
-    game_data = get(game = game, ood_num=-1, data_root=None, num_preload=num_datasets_to_load) # 11 corresponds to over 1 million games
+    if game == "othello":
+        num_datasets_to_load=(test_size+train_size)//100000 + 1
+        game_data = get(ood_num=-1, data_root=None, num_preload=num_datasets_to_load) # 11 corresponds to over 1 million games
+    elif game == "chess":
+        game_data = chess_get(data_root=None, num_data=test_size+train_size)
     
     random.seed(shuffle_seed)
     random.shuffle(game_data.sequences)
     train_game_data, test_game_data=copy(game_data), copy(game_data)
     train_game_data.sequences=game_data.sequences[:train_size]
     test_game_data.sequences=game_data.sequences[train_size:train_size+test_size]
-    return CharDataset(train_game_data), CharDataset(test_game_data)
+    return CharDataset(train_game_data, game=game), CharDataset(test_game_data, game=game)
 
 
 def load_probe_datasets_automatic(train_size:int, test_size:int, shuffle_seed=1, mode="precomputed"):

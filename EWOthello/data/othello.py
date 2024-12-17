@@ -16,6 +16,7 @@ from matplotlib.colors import ListedColormap
 import matplotlib.patches as mpatches
 from matplotlib.colors import LinearSegmentedColormap
 from pathlib import Path
+from datasets import load_dataset
 
 rows = list("abcdefgh")
 columns = [str(_) for _ in range(1, 9)]
@@ -81,11 +82,11 @@ def get_ood_game(_):
     return tbr
 
 
-def get(game="othello", ood_perc=0.0, data_root=None, wthor=False, ood_num=1000, num_preload=10):
-    if game == "othello":
+def get(ood_perc=0.0, data_root=None, wthor=False, ood_num=1000, num_preload=10):
         return Othello(ood_perc, data_root, wthor, ood_num, num_preload=num_preload)
-    elif game == "chess":
-        return Chess(data_root=data_root, num_preload=num_preload)
+
+def chess_get(data_root=None, num_data=0):
+        return Chess(num_data=num_data)
 
 
 def get_data_path(data_root):
@@ -211,10 +212,16 @@ class Othello:
             tbr = self.sequences[i]
         return tbr
 
-#todo: figure out how to load chess games and from where
 class Chess:
-    def __init__(self, data_root, num_preload):
+    def __init__(self, num_data):
+        ds = load_dataset("adamkarvonen/chess_sae_text")
+        games_loaded = 0
         self.sequences = []
+        for x in iter(ds):
+            self.sequences.append(x["text"][:256])
+            games_loaded += 1
+            if games_loaded >= num_data:
+                break
 
     def __len__(self):
         return len(self.sequences)
