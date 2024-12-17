@@ -250,6 +250,8 @@ class AnyGPTforProbing(torch.nn.Module):
             if game == "othello":
                 output_size = gpt.pos_emb.shape[-1]
             #todo: add if statement for chess too
+            if game == "chess":
+                output_size = 512
         self.output_size = output_size
 
     def forward(self, idx):

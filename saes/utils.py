@@ -6,6 +6,8 @@ import itertools
 import zipfile
 from copy import copy
 from tqdm import tqdm
+from transformers import GPT2LMHeadModel
+from nnsight import NNsight
 
 from EWOthello.data.othello import get
 from EWOthello.mingpt.model import GPTConfig, GPTforProbing, AnyGPTforProbing
@@ -104,7 +106,6 @@ def load_dataset(split_fraction=1, use_first_half_of_split=True, entries_limit=F
 
 othello_gpt_path = "EWOthello/ckpts/DeanKLi_GPT_Synthetic_8L8H/"
 #todo: figure out how to load ChessGPT
-chess_gpt_path = "" #tbd
 
 def load_pre_trained_gpt(probe_path=None, game="othello", probe_layer:int=3):
     """
@@ -124,10 +125,10 @@ def load_pre_trained_gpt(probe_path=None, game="othello", probe_layer:int=3):
         GPT_probe = AnyGPTforProbing(gpt=othello_probe, game=game)
 
     elif game == "chess":
-        if probe_path == None:
-            probe_path = chess_gpt_path
-        chess_probe = None #load ChessGPT here
-        GPT_probe = AnyGPTforProbing(gpt=chess_probe, game=game)
+        full_model = GPT2LMHeadModel.from_pretrained("adamkarvonen/RandomWeights8LayerChessGPT2").to(device)
+        nnsight_model = NNsight(full_model).to(device)
+        chess_probe = nnsight_model.transformer.h[probe_layer]
+        GPT_probe = AnyGPTforProbing(gpt=chess_probe, game=game, output_size=512)
     return GPT_probe
 
 
