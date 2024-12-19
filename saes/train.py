@@ -10,7 +10,6 @@ from saes.probes import LinearProbe, ProbeDataset, SAEforProbing, L1_Sparse_Prob
 from saes.utils import load_datasets_automatic, load_probe_datasets_automatic
 from saes.sae_template import SAETemplate
 from saes.probes import LinearProbe, ProbeDataset
-from saes.utils import load_datasets_automatic
 
 class TrainingParams:
 

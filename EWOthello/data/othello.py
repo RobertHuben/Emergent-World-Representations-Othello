@@ -217,7 +217,7 @@ class Chess:
         ds = load_dataset("adamkarvonen/chess_sae_text")
         games_loaded = 0
         self.sequences = []
-        for x in iter(ds):
+        for x in iter(ds["train"]):
             self.sequences.append(x["text"][:256])
             games_loaded += 1
             if games_loaded >= num_data:

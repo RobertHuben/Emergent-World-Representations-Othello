@@ -124,13 +124,13 @@ def load_pre_trained_gpt(probe_path=None, game="othello", probe_layer:int=3):
         
         othello_probe.load_state_dict(torch.load(probe_path + f"GPT_Synthetic_{n_layer}Layers_{n_head}Heads.ckpt", map_location=device))
         othello_probe.eval()
-        GPT_probe = AnyGPTforProbing(gpt=othello_probe, game=game)
+        GPT_probe = AnyGPTforProbing(model=othello_probe, game=game)
 
     elif game == "chess":
         full_model = GPT2LMHeadModel.from_pretrained("adamkarvonen/RandomWeights8LayerChessGPT2").to(device)
         nnsight_model = NNsight(full_model).to(device)
         chess_probe = nnsight_model.transformer.h[probe_layer]
-        GPT_probe = AnyGPTforProbing(gpt=chess_probe, game=game, output_size=512)
+        GPT_probe = AnyGPTforProbing(nnsight_pair=(nnsight_model, chess_probe), game=game, output_size=512)
     return GPT_probe
 
 

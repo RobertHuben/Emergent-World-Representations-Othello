@@ -241,23 +241,36 @@ class GPTforProbing(GPT):
         else:
             return x
 
-class AnyGPTforProbing(torch.nn.Module):
-    def __init__(self, gpt, game, output_size=None) -> None:
+class AnyGPTforProbing(nn.Module):
+    def __init__(self, game, model:nn.Module=None, nnsight_pair=None, output_size=None) -> None:
         super().__init__()
-        self.gpt = gpt
+        if model:
+            self.model = model
+        else:
+            assert nnsight_pair, "No model specified"
+            self.nnsight_model, self.submodule_envoy = nnsight_pair
+            self.model = self.nnsight_model._model #I believe this line is necessary to get the underlying model as part of the parameters
         self.game = game
         if output_size == None:
             if game == "othello":
-                output_size = gpt.pos_emb.shape[-1]
+                output_size = model.pos_emb.shape[-1]
             #todo: add if statement for chess too
             if game == "chess":
                 output_size = 512
         self.output_size = output_size
 
     def forward(self, idx):
-        output = self.gpt(idx)
+        if self.game == "othello":
+            output = self.model(idx)
+        else:
+            assert self.game == "chess"
+            with self.nnsight_model.trace(idx, invoker_args={'truncation': True}):
+                output = self.submodule_envoy.output.save()
+            output = output.value[0]
+
         if not self.output_size == None:
-            assert output.shape[0] == self.output_size
+            assert output.shape[-1] == self.output_size
+
         return output
 
 class GPTforProbing_v2(GPT):

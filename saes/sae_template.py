@@ -17,11 +17,13 @@ from saes.utils import vectorized_f1_score
 logger = logging.getLogger(__name__)
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
+CHESS_WINDOW_START_TRIM = 0
+CHESS_WINDOW_END_TRIM = 0
+
 class SAETemplate(torch.nn.Module, ABC):
     '''
     abstract base class that defines the SAE contract
     '''
-
     def __init__(self, gpt:AnyGPTforProbing, num_features:int, window_start_trim:int=4, window_end_trim:int=8):
         super().__init__()
         self.gpt=gpt
@@ -29,19 +31,24 @@ class SAETemplate(torch.nn.Module, ABC):
         for param in self.gpt.parameters():
             #freezes the gpt model  
             param.requires_grad=False 
-        self.window_start_trim=window_start_trim
-        self.window_end_trim=window_end_trim
+        if self.gpt.game == "othello":
+            self.window_start_trim=window_start_trim
+            self.window_end_trim=window_end_trim
+        else:
+            assert self.gpt.game == "chess", "Unrecognized game type"
+            self.window_start_trim = CHESS_WINDOW_START_TRIM
+            self.window_end_trim = CHESS_WINDOW_END_TRIM
         self.num_data_trained_on=0
         self.classifier_aurocs=None
         self.classifier_smds=None
         self.classifier_f1_scores=None
         try:
-            self.residual_stream_mean=torch.load("saes/model_params/residual_stream_mean.pkl", map_location=device)
-            self.average_residual_stream_norm=torch.load("saes/model_params/average_residual_stream_norm.pkl", map_location=device)
+            self.residual_stream_mean=torch.load(f"saes/model_params/{self.gpt.game}/residual_stream_mean.pkl", map_location=device)
+            self.average_residual_stream_norm=torch.load(f"saes/model_params/{self.gpt.game}/average_residual_stream_norm.pkl", map_location=device)
         except:
             self.residual_stream_mean=torch.zeros((1))
             self.average_residual_stream_norm=torch.ones((1))
-            logger.warning("Please ensure the correct files are in saes/model_params/residual_stream_mean.pkl and saes/model_params/average_residual_stream_norm.pkl!")
+            logger.warning(f"Please ensure the correct files are in saes/model_params/{self.gpt.game}/residual_stream_mean.pkl and saes/model_params/{self.gpt.game}/average_residual_stream_norm.pkl!")
 
     def create_linear_encoder_decoder(self, decoder_initialization_scale):
         residual_stream_size=self.gpt.output_size
@@ -85,7 +92,7 @@ class SAETemplate(torch.nn.Module, ABC):
         hidden_layers=[]
         reconstructed_residual_streams=[]
         test_dataloader=iter(torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False))
-        for test_input, test_labels in test_dataloader:
+        for test_input, test_labels in tqdm(test_dataloader):
             test_input=test_input.to(device)
             loss, residual_stream, hidden_layer, reconstructed_residual_stream = self.forward_on_tokens(test_input, compute_loss=include_loss)
             if include_loss:

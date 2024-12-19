@@ -44,6 +44,7 @@ class CharDataset(Dataset):
         # grab a chunk of (block_size + 1) characters from the data
         chunk = self.data[idx]
         if len(chunk) != self.max_len:
+            assert self.game == "othello", "Not all data chunks of length 256 in non-othello dataset"
             chunk += [
                 -100,
             ] * (
