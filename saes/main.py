@@ -130,7 +130,7 @@ if __name__=="__main__":
                 train_and_test_sae(sae, sae_name) """
     
     
-    gpt = load_pre_trained_gpt(probe_layer=3)
+    """ gpt = load_pre_trained_gpt(probe_layer=3)
     epsilon = 0.01
     deltas = [0.1]
     coeffs = [50, 100, 200, 300]
@@ -139,7 +139,7 @@ if __name__=="__main__":
             sae = Gated_Smoothed_L0_SAE(gpt, 1024, coeff, epsilon, delta)
             sae_name = f"gated_smoothed_L0_coeff={coeff}_delta={delta}_epsilon={epsilon}"
             print(f"Beginning training of {sae_name}")
-            train_and_test_sae(sae, sae_name)
+            train_and_test_sae(sae, sae_name) """
 
     
     """ test_train_size = 1000
@@ -164,3 +164,6 @@ if __name__=="__main__":
         sae_to_probe = SAEforProbing(sae)
         probe = LinearProbe(sae_to_probe, input_dim=1024, layer_to_probe="hidden")
         train_probe(probe, f"linear_probe_layer=hidden_sae={sae_name}", TrainingParams(num_epochs=6), dataset_pair=(train_dataset, test_dataset)) """
+    
+from karvonen_translation import test_karvonen_sae_coverage
+test_karvonen_sae_coverage("trained_models/karvonen_saes/best_f1_ae")
