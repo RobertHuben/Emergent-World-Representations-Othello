@@ -13,10 +13,21 @@ def test_karvonen_sae_coverage(autoencoder_path):
     sae = KarvonenSAE(gpt, num_features=512, autoencoder_path=autoencoder_path)
     sae.to(device)
 
-    train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000, game=sae.gpt.game)
+    train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
     sae.compute_all_f1_vectorized(test_dataset)
     cov = sae.compute_coverage()
     print(f"Coverage: {cov}") 
+
+def test_our_sae_coverage(autoencoder_path):
+    layer = 3 #un-hardcode this later
+    with open(autoencoder_path, "rb") as f:
+        sae = torch.load(f, map_location=device)
+    sae.to(device)
+
+    train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
+    sae.compute_all_f1_vectorized(test_dataset)
+    cov = sae.compute_coverage()
+    print(f"Coverage: {cov}")
 
 class KarvonenSAE(SAETemplate):
     def __init__(self, gpt:AnyGPTforProbing, num_features:int, autoencoder_path:str, window_start_trim=0, window_end_trim=0):

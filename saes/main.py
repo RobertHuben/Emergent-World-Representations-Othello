@@ -165,5 +165,6 @@ if __name__=="__main__":
         probe = LinearProbe(sae_to_probe, input_dim=1024, layer_to_probe="hidden")
         train_probe(probe, f"linear_probe_layer=hidden_sae={sae_name}", TrainingParams(num_epochs=6), dataset_pair=(train_dataset, test_dataset)) """
     
-from karvonen_translation import test_karvonen_sae_coverage
-test_karvonen_sae_coverage("trained_models/karvonen_saes/best_f1_standard_ae")
+from karvonen_translation import test_karvonen_sae_coverage, test_our_sae_coverage
+#test_karvonen_sae_coverage("trained_models/karvonen_saes/best_f1_standard_ae")
+test_our_sae_coverage("trained_models/for_analysis/08_26_anthropic_sae_coeff=1.7_features=1024_aurocs_computed.pkl")
