@@ -16,6 +16,8 @@ def test_karvonen_sae_coverage(autoencoder_path):
         sae.to(device)
         sae.compute_all_f1_vectorized(test_dataset)
         coverage_per_layer.append(sae.compute_coverage())
+        del sae
+        del gpt
     print(f"Coverage: {coverage_per_layer}") 
 
 class KarvonenSAE(SAETemplate):
