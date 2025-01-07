@@ -3,7 +3,7 @@ import torch
 from sae_template import SAETemplate
 from EWOthello.mingpt.model import AnyGPTforProbing
 from saes.utils import load_datasets_automatic, load_pre_trained_gpt
-from dictionary import GatedAutoEncoder
+from dictionary import GatedAutoEncoder, AutoEncoder
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -47,7 +47,7 @@ def get_ae(autoencoder_path):
 
     # rangell: this is a super hacky way to get the correct dictionary class from the config
     #ae_class = eval(config["trainer"]["trainer_class"] + f"({config_str})").ae.__class__
-    ae_class = GatedAutoEncoder
+    ae_class = AutoEncoder #GatedAutoEncoder
     if "k" in config["trainer"]:
         ae = ae_class.from_pretrained(
             autoencoder_model_path, k=config["trainer"]["k"], device=device
