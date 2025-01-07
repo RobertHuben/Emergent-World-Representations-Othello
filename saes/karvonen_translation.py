@@ -11,6 +11,7 @@ def test_karvonen_sae_coverage(autoencoder_path):
     layer = 5 #un-hardcode this later
     gpt = load_pre_trained_gpt(probe_layer=layer)
     sae = KarvonenSAE(gpt, num_features=512, autoencoder_path=autoencoder_path)
+    sae.to(device)
 
     train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000, game=sae.gpt.game)
     sae.compute_all_f1_vectorized(test_dataset)
