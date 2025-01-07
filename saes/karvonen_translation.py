@@ -15,7 +15,8 @@ def test_karvonen_sae_coverage(autoencoder_path):
 
     train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000, game=sae.gpt.game)
     sae.compute_all_f1_vectorized(test_dataset)
-    return sae.compute_coverage()
+    cov = sae.compute_coverage()
+    print(f"Coverage: {cov}") 
 
 class KarvonenSAE(SAETemplate):
     def __init__(self, gpt:AnyGPTforProbing, num_features:int, autoencoder_path:str, window_start_trim=0, window_end_trim=0):
