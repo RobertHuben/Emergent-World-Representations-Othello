@@ -8,15 +8,15 @@ from dictionary import GatedAutoEncoder
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
 def test_karvonen_sae_coverage(autoencoder_path):
-    layer = 6 #un-hardcode this later
-    gpt = load_pre_trained_gpt(probe_layer=layer)
-    sae = KarvonenSAE(gpt, num_features=512, autoencoder_path=autoencoder_path)
-    sae.to(device)
-
     train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000, game=sae.gpt.game)
-    sae.compute_all_f1_vectorized(test_dataset)
-    cov = sae.compute_coverage()
-    print(f"Coverage: {cov}") 
+    coverage_per_layer = []
+    for layer in [1, 2, 3, 4, 5, 6, 7]:
+        gpt = load_pre_trained_gpt(probe_layer=layer)
+        sae = KarvonenSAE(gpt, num_features=512, autoencoder_path=autoencoder_path)
+        sae.to(device)
+        sae.compute_all_f1_vectorized(test_dataset)
+        coverage_per_layer.append(sae.compute_coverage())
+    print(f"Coverage: {coverage_per_layer}") 
 
 class KarvonenSAE(SAETemplate):
     def __init__(self, gpt:AnyGPTforProbing, num_features:int, autoencoder_path:str, window_start_trim=0, window_end_trim=0):
