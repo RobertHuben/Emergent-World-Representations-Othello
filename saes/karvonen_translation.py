@@ -8,7 +8,7 @@ from dictionary import GatedAutoEncoder
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
 def test_karvonen_sae_coverage(autoencoder_path):
-    train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000, game=sae.gpt.game)
+    train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000, game="othello")
     coverage_per_layer = []
     for layer in [1, 2, 3, 4, 5, 6, 7]:
         gpt = load_pre_trained_gpt(probe_layer=layer)
