@@ -166,4 +166,4 @@ if __name__=="__main__":
         train_probe(probe, f"linear_probe_layer=hidden_sae={sae_name}", TrainingParams(num_epochs=6), dataset_pair=(train_dataset, test_dataset)) """
     
 from karvonen_translation import test_karvonen_sae_coverage
-test_karvonen_sae_coverage("trained_models/karvonen_saes/best_f1_ae")
+test_karvonen_sae_coverage("trained_models/karvonen_saes/best_f1_standard_ae")
