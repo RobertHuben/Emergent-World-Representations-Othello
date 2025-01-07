@@ -3,8 +3,7 @@ import torch
 from sae_template import SAETemplate
 from EWOthello.mingpt.model import AnyGPTforProbing
 from saes.utils import load_datasets_automatic, load_pre_trained_gpt
-from dictionary_learning import GatedAutoEncoder
-
+from dictionary import GatedAutoEncoder
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
