@@ -149,16 +149,14 @@ def vectorized_f1_score(scores:torch.tensor, labels:torch.tensor, thresholds:tor
         scores=scores.unsqueeze(-1)
     labels=labels.to(device=device, dtype=torch.float32)
     indicated_positives=(scores>=thresholds.unsqueeze(0).unsqueeze(0)).to(device=device, dtype=torch.float32) #shape (N,K,T)
-    indicated_negatives = 1-indicated_positives
-    negative_labels = 1-labels
+
     if data_to_use_mask:
         indicated_positives *= data_to_use_mask
-        indicated_negatives *= data_to_use_mask
         labels *= data_to_use_mask
-        negative_labels *= data_to_use_mask
+        
     true_positives=torch.tensordot(indicated_positives,labels, dims=([0],[0]))
-    false_positives=torch.tensordot(indicated_positives,negative_labels, dims=([0],[0]))
-    false_negatives=torch.tensordot(indicated_negatives,labels, dims=([0],[0]))
+    false_positives=torch.tensordot(indicated_positives,(1-labels), dims=([0],[0]))
+    false_negatives=torch.tensordot((1-indicated_positives),labels, dims=([0],[0]))
     f1_scores=(2*true_positives)/(2*true_positives+false_negatives+false_positives)
     masked_f1_scores=torch.where((true_positives+false_negatives+false_positives)==0, 0, f1_scores)
     return masked_f1_scores
