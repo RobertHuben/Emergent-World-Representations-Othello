@@ -298,7 +298,7 @@ class SAETemplate(torch.nn.Module, ABC):
         self.classifier_smds=standardized_mean_distances        
 
     @torch.inference_mode()
-    def compute_all_f1_vectorized(self, evaluation_dataset:DataLoader, alternate_players=True, num_thresholds=10,):
+    def compute_all_f1_vectorized(self, evaluation_dataset:DataLoader, alternate_players=True, num_thresholds=10, ignore_empty_positions=False):
         '''
         computes f1 scores of each sae feature on the entire evaluation_dataset, across a range of f1 thresholds
         returns a shape (N,T,64,3) tensor, where N is the number of features, T is the number of thresholds
@@ -316,11 +316,18 @@ class SAETemplate(torch.nn.Module, ABC):
         hidden_layers=hidden_layers/max_activations
         thresholds=torch.tensor([idx/num_thresholds for idx in range(num_thresholds)]).to(device)
         f1s=torch.zeros((hidden_layers.shape[1], num_thresholds, board_states.shape[1], 3))
+        if ignore_empty_positions:
+            f1s_without_empty=torch.zeros((hidden_layers.shape[1], num_thresholds, board_states.shape[1], 3))
         for j, board_position in tqdm(enumerate(board_states.transpose(0,1))):
             for k, piece_class in enumerate([0,1,2]):
                 is_target_piece=board_position==piece_class
                 f1s[:,:,j,k]= vectorized_f1_score(hidden_layers, is_target_piece, thresholds)
+                if ignore_empty_positions:
+                    non_empty_positions = board_position!=1
+                    f1s_without_empty[:,:,j,k]= vectorized_f1_score(hidden_layers, is_target_piece, thresholds, data_to_use_mask=non_empty_positions)
         self.classifier_f1_scores=f1s
+        if ignore_empty_positions:
+            self.classifier_f1_scores_without_empty = f1s_without_empty
 
     @torch.inference_mode()
     def compute_all_f1_slow(self, evaluation_dataset:DataLoader, alternate_players=True, num_thresholds=10,):
@@ -352,18 +359,28 @@ class SAETemplate(torch.nn.Module, ABC):
                         f1s[i,l,j,k]=this_f1
         self.classifier_f1_scores=f1s
 
-    def compute_coverage(self):
+    #specific to Othello, need to fix in general
+    def compute_coverage(self, include_empty_class=False):
         '''
         computes the coverage as defined in Karvonen et al (https://arxiv.org/pdf/2408.00113)
         finds the best f1 scores per position, and averages those
         '''
         if self.classifier_f1_scores is None:
             return None
-        own_enemy_classifier_f1_scores=self.classifier_f1_scores[:,:,:,[0,2]]
-        print(own_enemy_classifier_f1_scores.shape)
-        reshaped_f1_scores=own_enemy_classifier_f1_scores.flatten(start_dim=0, end_dim=1).flatten(start_dim=1, end_dim=2)
-        best_f1s=reshaped_f1_scores.max(dim=0).values
-        return float(best_f1s.mean())
+        score_list = [self.classifier_f1_scores, self.classifier_f1_scores_without_empty]
+        name_list = ["coverage", "coverage_without_empty_positions"]
+        results_dict = {}
+        for i, scores in enumerate(score_list):
+            if not scores is None:
+                if include_empty_class:
+                    reshaped_f1_scores=scores.flatten(start_dim=0, end_dim=1).flatten(start_dim=1, end_dim=2)
+                    best_f1s=reshaped_f1_scores.max(dim=0).values
+                    results_dict[f"{name_list[i]}_with_empty_class"] = float(best_f1s.mean())
+                scores=scores[:,:,:,[0,2]] #specific to Othello, need to fix in general
+                reshaped_f1_scores=scores.flatten(start_dim=0, end_dim=1).flatten(start_dim=1, end_dim=2)
+                best_f1s=reshaped_f1_scores.max(dim=0).values
+                results_dict[name_list[i]] = float(best_f1s.mean())
+        return results_dict
 
     def num_classifier_above_threshold(self, metric_name="classifier_aurocs", threshold=.9):
         '''

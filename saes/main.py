@@ -166,5 +166,15 @@ if __name__=="__main__":
         train_probe(probe, f"linear_probe_layer=hidden_sae={sae_name}", TrainingParams(num_epochs=6), dataset_pair=(train_dataset, test_dataset)) """
     
 from karvonen_translation import test_karvonen_sae_coverage, test_our_sae_coverage
-#test_karvonen_sae_coverage("trained_models/karvonen_saes/best_f1_standard_ae")
-test_our_sae_coverage("trained_models/for_analysis/08_26_anthropic_sae_coeff=1.7_features=1024_aurocs_computed.pkl")
+karvonen_best_no_trim = test_karvonen_sae_coverage("trained_models/karvonen_saes/best_f1_ae")
+print(f"Karvonen best no trim: {karvonen_best_no_trim}")
+#karvonen_best_trim = test_karvonen_sae_coverage("trained_models/karvonen_saes/best_f1_ae", trim_window=True)
+#print(f"Karvonen best trim: {karvonen_best_trim}")
+#karvonen_standard_no_trim = test_karvonen_sae_coverage("trained_models/karvonen_saes/best_f1_standard_ae")
+#print(f"Karvonen best standard no trim: {karvonen_standard_no_trim}")
+#karvonen_standard_trim = test_karvonen_sae_coverage("trained_models/karvonen_saes/best_f1_standard_ae", trim_window=True)
+#print(f"Karvonen best standard trim: {karvonen_standard_trim}")
+#huben_no_trim = test_our_sae_coverage("trained_models/for_analysis/08_26_anthropic_sae_coeff=1.7_features=1024_aurocs_computed.pkl", trim_window=False)
+#print(f"Our best no trim: {huben_no_trim}")
+#huben_trim = test_our_sae_coverage("trained_models/for_analysis/08_26_anthropic_sae_coeff=1.7_features=1024_aurocs_computed.pkl")
+#print(f"Our best trim: {huben_trim}")

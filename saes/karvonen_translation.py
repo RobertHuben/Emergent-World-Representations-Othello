@@ -7,27 +7,31 @@ from dictionary import GatedAutoEncoder, AutoEncoder
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
-def test_karvonen_sae_coverage(autoencoder_path):
-    layer = 5 #un-hardcode this later
+def test_karvonen_sae_coverage(autoencoder_path, trim_window=False):
+    layer = 5 #un-hardcode this later, if needed
     gpt = load_pre_trained_gpt(probe_layer=layer)
-    sae = KarvonenSAE(gpt, num_features=512, autoencoder_path=autoencoder_path)
+    if trim_window:
+        sae = KarvonenSAE(gpt, num_features=512, autoencoder_path=autoencoder_path, window_start_trim=4, window_end_trim=8)
+    else:
+        sae = KarvonenSAE(gpt, num_features=512, autoencoder_path=autoencoder_path)
     sae.to(device)
 
     train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
-    sae.compute_all_f1_vectorized(test_dataset)
-    cov = sae.compute_coverage()
-    print(f"Coverage: {cov}") 
+    sae.compute_all_f1_vectorized(test_dataset, ignore_empty_positions=True)
+    return sae.compute_coverage(include_empty_class=True)
 
-def test_our_sae_coverage(autoencoder_path):
+def test_our_sae_coverage(autoencoder_path, trim_window=True):
     layer = 3 #un-hardcode this later
     with open(autoencoder_path, "rb") as f:
         sae = torch.load(f, map_location=device)
     sae.to(device)
-
+    if not trim_window:
+        sae.window_start_trim=0
+        sae.window_end_trim=0
+    
     train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
-    sae.compute_all_f1_vectorized(test_dataset)
-    cov = sae.compute_coverage()
-    print(f"Coverage: {cov}")
+    sae.compute_all_f1_vectorized(test_dataset, ignore_empty_positions=True)
+    return sae.compute_coverage(include_empty_class=True)
 
 class KarvonenSAE(SAETemplate):
     def __init__(self, gpt:AnyGPTforProbing, num_features:int, autoencoder_path:str, window_start_trim=0, window_end_trim=0):
