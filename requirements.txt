@@ -6,3 +6,6 @@ circuitsvis
 seaborn
 torcheval
 diptest
+datasets
+transformers
+nnsight
