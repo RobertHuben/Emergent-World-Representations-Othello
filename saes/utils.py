@@ -151,6 +151,7 @@ def vectorized_f1_score(scores:torch.tensor, labels:torch.tensor, thresholds:tor
     indicated_positives=(scores>=thresholds.unsqueeze(0).unsqueeze(0)).to(device=device, dtype=torch.float32) #shape (N,K,T)
 
     if not data_to_use_mask is None:
+        data_to_use_mask = data_to_use_mask.to(device)
         indicated_positives *= data_to_use_mask.unsqueeze(-1).unsqueeze(-1)
         labels *= data_to_use_mask
 
