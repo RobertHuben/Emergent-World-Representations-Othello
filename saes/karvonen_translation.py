@@ -7,13 +7,13 @@ from dictionary import GatedAutoEncoder, AutoEncoder
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 
-def test_karvonen_sae_coverage(autoencoder_path, trim_window=False):
+def test_karvonen_sae_coverage(autoencoder_path, ae_type, trim_window=False):
     layer = 5 #un-hardcode this later, if needed
     gpt = load_pre_trained_gpt(probe_layer=layer)
     if trim_window:
-        sae = KarvonenSAE(gpt, num_features=512, autoencoder_path=autoencoder_path, window_start_trim=4, window_end_trim=8)
+        sae = KarvonenSAE(gpt, num_features=512, autoencoder_path=autoencoder_path, ae_type=ae_type, window_start_trim=4, window_end_trim=8)
     else:
-        sae = KarvonenSAE(gpt, num_features=512, autoencoder_path=autoencoder_path)
+        sae = KarvonenSAE(gpt, num_features=512, autoencoder_path=autoencoder_path, ae_type=ae_type)
     sae.to(device)
 
     train_dataset, test_dataset = load_datasets_automatic(train_size=1, test_size=1000)
@@ -34,16 +34,16 @@ def test_our_sae_coverage(autoencoder_path, trim_window=True):
     return sae.compute_coverage(include_empty_class=True)
 
 class KarvonenSAE(SAETemplate):
-    def __init__(self, gpt:AnyGPTforProbing, num_features:int, autoencoder_path:str, window_start_trim=0, window_end_trim=0):
+    def __init__(self, gpt:AnyGPTforProbing, num_features:int, autoencoder_path:str, ae_type, window_start_trim=0, window_end_trim=0):
         super().__init__(gpt=gpt, num_features=num_features, window_start_trim=window_start_trim, window_end_trim=window_end_trim)
-        self.sae = get_ae(autoencoder_path)
+        self.sae = get_ae(autoencoder_path, ae_type)
 
     def forward(self, residual_stream, compute_loss=False):
         reconstructed_residual_stream, hidden_layer = self.sae.forward(residual_stream, output_features=True)
         loss = None
         return loss, residual_stream, hidden_layer, reconstructed_residual_stream
 
-def get_ae(autoencoder_path):
+def get_ae(autoencoder_path, ae_type):
     autoencoder_model_path = f"{autoencoder_path}/ae.pt"
     autoencoder_config_path = f"{autoencoder_path}/config.json"
 
@@ -62,7 +62,10 @@ def get_ae(autoencoder_path):
 
     # rangell: this is a super hacky way to get the correct dictionary class from the config
     #ae_class = eval(config["trainer"]["trainer_class"] + f"({config_str})").ae.__class__
-    ae_class = AutoEncoder #GatedAutoEncoder
+    if ae_type == "standard":
+        ae_class = AutoEncoder
+    elif ae_type == "gated":
+        ae_class = GatedAutoEncoder
     if "k" in config["trainer"]:
         ae = ae_class.from_pretrained(
             autoencoder_model_path, k=config["trainer"]["k"], device=device
